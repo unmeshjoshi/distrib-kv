@@ -22,7 +22,7 @@ object Row {
   }
 }
 
-case class Row(key: String, value: String)
+case class Row(key: String, value: String, timestamp:Long = System.currentTimeMillis())
 
 class DbManager(metadataDirectory: String) {
   val systemTable = new Table(metadataDirectory, "system")

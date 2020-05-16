@@ -5,6 +5,7 @@ import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.{ConcurrentHashMap, ScheduledThreadPoolExecutor, TimeUnit}
 import java.util.{ArrayList, Collections, List, Random, Set}
 
+import org.dist.failuredetector.failuredetector.PhiChiAccrualFailureDetector
 import org.dist.util.Logging
 import org.slf4j.LoggerFactory
 
@@ -31,7 +32,7 @@ class Gossiper(private[kvstore] val generationNbr: Int,
                private[kvstore] val liveEndpoints: util.List[InetAddressAndPort] = new util.ArrayList[InetAddressAndPort],
                private[kvstore] val unreachableEndpoints: util.List[InetAddressAndPort] = new util.ArrayList[InetAddressAndPort]) extends Logging {
 
-  val failureDetector = new FailureDetector(this)
+  val failureDetector = new PhiChiAccrualFailureDetector[InetAddressAndPort]()
 
   def suspect(ep: InetAddressAndPort) = {
     val state = endpointStatemap.get(ep)
@@ -380,7 +381,7 @@ class Gossiper(private[kvstore] val generationNbr: Int,
       import scala.jdk.CollectionConverters._
       for (endpoint <- eps) {
         if (endpoint != localEndPoint) { //continue //todo: continue is not supported
-        failureDetector.intepret(endpoint)
+        failureDetector.interpret(endpoint)
         val epState = endpointStatemap.get(endpoint)
         if (epState != null) {
           val l = now - epState.updateTimeStamp
