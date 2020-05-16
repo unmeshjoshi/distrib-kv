@@ -1,13 +1,9 @@
-package org.dist.kvstore.locator
+package org.dist.kvstore
 
-import java.math.BigInteger
 import java.util
 
-import org.dist.kvstore.{FBUtilities, GuidGenerator, InetAddressAndPort, TokenMetadata}
+import org.dist.kvstore.locator.RackUnawareStrategy
 import org.scalatest.FunSuite
-
-import scala.reflect.internal.util.Collections
-import scala.jdk.CollectionConverters._
 
 class RackUnawareStrategyTest extends FunSuite {
 
