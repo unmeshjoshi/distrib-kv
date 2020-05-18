@@ -2,7 +2,7 @@ package org.dist.simplegossip
 
 import java.util
 
-import org.dist.kvstore.{EndPointState, InetAddressAndPort, RowMutationResponse}
+import org.dist.kvstore.{ApplicationState, EndPointState, InetAddressAndPort, RowMutationResponse}
 import org.dist.kvstore.client.Client
 import org.dist.queue.TestUtils
 import org.dist.util.Networks
@@ -35,7 +35,7 @@ class StorageServiceGossipTest extends FunSuite {
 
     storages.asScala.foreach(s ⇒ {
       val states: util.Collection[EndPointState] = seedNode.gossiper.endpointStateMap.values()
-      val tokens: Iterable[String] = states.asScala.map(ep => ep.getToken().value)
+      val tokens = states.asScala.map(ep => ep.applicationStates.get(ApplicationState.TOKENS).value)
       assert(tokens.toList.contains(s.gossiper.token.toString()))
     })
 

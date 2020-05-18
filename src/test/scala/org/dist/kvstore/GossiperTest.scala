@@ -1,5 +1,6 @@
 package org.dist.kvstore
 
+import org.dist.simplegossip.builders.{GossipDigestBuilder, GossipSynMessageBuilder}
 import org.scalatest.FunSuite
 
 import scala.jdk.CollectionConverters._
@@ -69,7 +70,7 @@ class GossiperTest extends FunSuite {
     gossiper.liveEndpoints.add(InetAddressAndPort.create("127.0.0.1", 8002))
 
 
-    val digests = new gossiper.GossipDigestBuilder().makeRandomGossipDigest()
+    val digests = new GossipDigestBuilder(localEndpoint, gossiper.endpointStatemap, gossiper.liveEndpoints).makeRandomGossipDigest()
     assert(digests.size() == 3)
     assert(digests.asScala.map(digest => digest.endPoint).contains(InetAddressAndPort.create("127.0.0.1", 8000)))
     assert(digests.asScala.map(digest => digest.endPoint).contains(InetAddressAndPort.create("127.0.0.1", 8002)))
@@ -96,7 +97,7 @@ class GossiperTest extends FunSuite {
     gossiper.liveEndpoints.add(node2)
 
 
-    val digests = new gossiper.GossipDigestBuilder().makeRandomGossipDigest()
+    val digests = new GossipDigestBuilder(localEndpoint, gossiper.endpointStatemap, gossiper.liveEndpoints).makeRandomGossipDigest()
     val node1Digest = digests.asScala.filter(digest => digest.endPoint == node1)
     assert(node1Digest(0).maxVersion == 3)
 
@@ -122,8 +123,8 @@ class GossiperTest extends FunSuite {
     val node2 = InetAddressAndPort.create("127.0.0.1", 8002)
     gossiper.liveEndpoints.add(node2)
 
-    val digests = new gossiper.GossipDigestBuilder().makeRandomGossipDigest()
-    val message = new gossiper.GossipSynMessageBuilder().makeGossipDigestSynMessage(digests)
+    val digests = new GossipDigestBuilder(localEndpoint, gossiper.endpointStatemap, gossiper.liveEndpoints).makeRandomGossipDigest()
+    val message = new GossipSynMessageBuilder("cluster1", localEndpoint).build(digests)
     assert(message.header.from == localEndpoint)
     assert(message.header.messageType == Stage.GOSSIP)
     assert(message.header.verb == Verb.GOSSIP_DIGEST_SYN)

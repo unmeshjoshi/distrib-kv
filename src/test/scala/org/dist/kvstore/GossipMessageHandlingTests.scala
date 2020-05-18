@@ -8,17 +8,8 @@ import org.scalatest.FunSuite
 import scala.jdk.CollectionConverters._
 
 class GossipMessageHandlingTests extends FunSuite {
-  /**
-   * initial gossipdigest empty endpoint state - Done
-   *#TODO
-   * endpoint state having same generation same version - Done
-   * endpoint state having same generation lower version - Done
-   * endpoint state having same generation higher version - Done
-   * endpoint state having lower generation than remote - Done
-   * send only endpoint state higher than the remote version - Done
-   */
 
-  test("should request all information from the endpoint if the state does not exist locally") {
+   test("should request all information from the endpoint if the state does not exist locally") {
     val seeds = Set(InetAddressAndPort.create("127.0.0.1", 8000))
     val builder = new GossiperTestBuilder(seeds)
     val gossiper = builder.build()

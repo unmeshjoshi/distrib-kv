@@ -1,5 +1,6 @@
 package org.dist.kvstore
 
+import java.math.BigInteger
 import java.util
 import java.util.{Collections, Map}
 
@@ -10,10 +11,6 @@ case class EndPointState(var heartBeatState: HeartBeatState,
                          updateTimestamp:Long = System.nanoTime(),
                          isAlive:Boolean = true,
                          updateTimeStamp:Long = System.currentTimeMillis()) {
-
-  def getToken() = {
-    applicationStates.get(ApplicationState.TOKENS)
-  }
 
   def addApplicationState(key: ApplicationState, value: VersionedValue): EndPointState = {
     addApplicationStates(Collections.singletonMap(key, value))

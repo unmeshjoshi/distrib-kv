@@ -6,6 +6,7 @@ import java.util.concurrent.{ConcurrentHashMap, ScheduledThreadPoolExecutor, Tim
 import java.util.{ArrayList, Collections, List, Random, Set}
 
 import org.dist.failuredetector.failuredetector.PhiChiAccrualFailureDetector
+import org.dist.simplegossip.builders.{GossipDigestBuilder, GossipSynMessageBuilder}
 import org.dist.util.Logging
 import org.slf4j.LoggerFactory
 
@@ -169,14 +170,6 @@ class Gossiper(private[kvstore] val generationNbr: Int,
     }
   }
 
-  private def log(gDigests: util.Set[GossipDigest]) = {
-    /* FOR DEBUG ONLY - remove later */ val sb = new StringBuilder
-    for (gDigest <- gDigests.asScala) {
-      sb.append(gDigest)
-      sb.append(" ")
-    }
-    trace("Gossip Digests are : " + sb.toString)
-  }
 
   /*
         This method is used to figure the state that the Gossiper has but Gossipee doesn't. The delta digests
@@ -350,8 +343,8 @@ class Gossiper(private[kvstore] val generationNbr: Int,
 
         updateLocalHeartbeatCounter
 
-        val randomDigest = new GossipDigestBuilder().makeRandomGossipDigest()
-        val gossipDigestSynMessage = new GossipSynMessageBuilder().makeGossipDigestSynMessage(randomDigest)
+        val randomDigest = new GossipDigestBuilder(localEndPoint, endpointStatemap, liveEndpoints).makeRandomGossipDigest()
+        val gossipDigestSynMessage = new GossipSynMessageBuilder(config.getClusterName(), localEndPoint).build(randomDigest)
 
         val sentToSeedNode = doGossipToLiveMember(gossipDigestSynMessage)
         /* Gossip to some unreachable member with some probability to check if he is back up */
@@ -446,14 +439,6 @@ class Gossiper(private[kvstore] val generationNbr: Int,
     }
   }
 
-  class GossipSynMessageBuilder {
-    def makeGossipDigestSynMessage(gDigests: util.List[GossipDigest]) = {
-      val gDigestMessage = new GossipDigestSyn(config.getClusterName(), gDigests)
-      val header = Header(localEndPoint, Stage.GOSSIP, Verb.GOSSIP_DIGEST_SYN)
-      Message(header, JsonSerDes.serialize(gDigestMessage))
-    }
-  }
-
   class GossipSynAckMessageBuilder {
 
     def makeGossipDigestAckMessage(deltaGossipDigest: util.ArrayList[GossipDigest], deltaEndPointStates: util.Map[InetAddressAndPort, EndPointState]) = {
@@ -474,40 +459,4 @@ class Gossiper(private[kvstore] val generationNbr: Int,
     }
   }
 
-  class GossipDigestBuilder {
-    /**
-     * No locking required since it is called from a method that already
-     * has acquired a lock. The gossip digest is built based on randomization
-     * rather than just looping through the collection of live endpoints.
-     *
-     */
-    def makeRandomGossipDigest() = {
-      //FIXME Figure out why duplicates getting added here
-      val digests = new util.HashSet[GossipDigest]()
-      /* Add the local endpoint state */
-      var epState = endpointStatemap.get(localEndPoint)
-      var generation = epState.heartBeatState.generation
-      var maxVersion = epState.getMaxEndPointStateVersion
-      val localDigest = new GossipDigest(localEndPoint, generation, maxVersion)
-
-      digests.add(localDigest)
-
-      val endpoints = new util.ArrayList[InetAddressAndPort](liveEndpoints)
-      Collections.shuffle(endpoints, random)
-
-      for (liveEndPoint <- endpoints.asScala) {
-        epState = endpointStatemap.get(liveEndPoint)
-        if (epState != null) {
-          generation = epState.heartBeatState.generation
-          maxVersion = epState.getMaxEndPointStateVersion
-          digests.add(GossipDigest(liveEndPoint, generation, maxVersion))
-        }
-        else digests.add(GossipDigest(liveEndPoint, 0, 0))
-      }
-
-      log(digests)
-
-      digests.asScala.toList.asJava
-    }
-  }
 }

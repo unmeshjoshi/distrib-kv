@@ -5,6 +5,7 @@ import java.net.{InetSocketAddress, ServerSocket, Socket}
 import java.util
 
 import org.dist.kvstore.{EndPointState, GossipDigest, GossipDigestSyn, Header, InetAddressAndPort, JsonSerDes, Message, RowMutation, RowMutationResponse, Stage, Verb}
+import org.dist.simplegossip.handlers.GossipDigestSynHandler
 import org.dist.util.SocketIO
 import org.slf4j.LoggerFactory
 
@@ -51,19 +52,6 @@ class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageServic
       val response = RowMutationResponse(1, rowMutation.key, success)
       val responseMessage = Message(Header(localEp, Stage.RESPONSE_STAGE, Verb.RESPONSE, rowMutationMessage.header.id), JsonSerDes.serialize(response))
       messagingService.sendTcpOneWay(responseMessage, rowMutationMessage.header.from)
-    }
-  }
-
-  class GossipDigestSynHandler(gossiper: Gossiper, messagingService: MessagingService) {
-    def handleMessage(synMessage: Message): Unit = {
-      val gossipDigestSyn = JsonSerDes.deserialize(synMessage.payloadJson.getBytes, classOf[GossipDigestSyn])
-
-      val deltaGossipDigest = new util.ArrayList[GossipDigest]()
-      val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
-      gossiper.examineGossiper(gossipDigestSyn.gDigests, deltaGossipDigest, deltaEndPointStates)
-
-      val synAckMessage = gossiper.makeGossipDigestAckMessage(deltaGossipDigest, deltaEndPointStates)
-      messagingService.sendTcpOneWay(synAckMessage, synMessage.header.from)
     }
   }
 

@@ -15,7 +15,7 @@ class Gossiper(val seed:InetAddressAndPort,
                val token:BigInteger,
                val tokenMetadata:TokenMetadata,
                val executor: ScheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(1)) extends Logging {
-
+  private[simplegossip] val seeds = if (seed == localEndPoint) List() else List(seed)
   val versionGenerator = new VersionGenerator()
 
   def initializeLocalEndpointState() = {
@@ -136,18 +136,15 @@ class Gossiper(val seed:InetAddressAndPort,
 
 
     private def doGossipToSeed(message: Message): Unit = {
-      val seeds = new util.ArrayList[InetAddressAndPort]()
-      seeds.add(seed)
-
       val size = seeds.size
       if (size > 0) {
         if (size == 1 && seeds.contains(localEndPoint)) return
-        if (liveEndpoints.size == 0) sendGossip(message, seeds)
+        if (liveEndpoints.size == 0) sendGossip(message, seeds.asJava)
         else {
           /* Gossip with the seed with some probability. */
           val probability = seeds.size / (liveEndpoints.size + unreachableEndpoints.size)
           val randDbl = random.nextDouble
-          if (randDbl <= probability) sendGossip(message, seeds)
+          if (randDbl <= probability) sendGossip(message, seeds.asJava)
         }
       }
     }
@@ -193,9 +190,8 @@ class Gossiper(val seed:InetAddressAndPort,
       for (liveEndPoint <- endpoints.asScala) {
         val epState = endpointStateMap.get(liveEndPoint)
         if (epState != null) {
-          digests.add(GossipDigest(liveEndPoint, 1, 1))
+          digests.add(GossipDigest(liveEndPoint, 1, epState.getMaxEndPointStateVersion()))
         }
-        else digests.add(GossipDigest(liveEndPoint, 0, 0))
       }
       digests.asScala.toList.asJava
     }
