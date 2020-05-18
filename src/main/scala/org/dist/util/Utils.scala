@@ -1,10 +1,14 @@
 package org.dist.util
 
 import java.io.{EOFException, File, FileInputStream, RandomAccessFile}
+import java.math.BigInteger
 import java.nio.ByteBuffer
 import java.nio.channels.{FileChannel, ReadableByteChannel}
+import java.nio.file.{Path, Paths}
 import java.util.concurrent.locks.Lock
 import java.util.zip.CRC32
+
+import org.dist.kvstore.{FBUtilities, GuidGenerator}
 
 import scala.collection.mutable.ListBuffer
 import scala.collection.{Map, Seq, mutable}
@@ -228,5 +232,20 @@ object Utils extends Logging {
     } finally {
       lock.unlock()
     }
+  }
+
+  def newToken() = {
+    val guid = GuidGenerator.guid
+    var token = FBUtilities.hash(guid)
+    if (token.signum == -1) token = token.multiply(BigInteger.valueOf(-1L))
+    token
+  }
+
+
+  def createDbDir(dbName: String) = {
+    val tmpDir: Path = Paths.get(System.getProperty("java.io.tmpdir"))
+    val node1Dir: String = tmpDir.toString + File.separator + dbName
+    new File(node1Dir).mkdirs()
+    node1Dir
   }
 }

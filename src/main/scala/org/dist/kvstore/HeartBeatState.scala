@@ -2,14 +2,10 @@ package org.dist.kvstore
 
 import java.util.concurrent.atomic.AtomicInteger
 
-case class HeartBeatState(generation:Int, version:Int, heartBeat:AtomicInteger = new AtomicInteger(0)) {
+//generation is incremented every time a server restarts, so that version is always a pair of 'generation, versionNbr'
+//Default generation to zero, for the cases where we do not care about restarts.
+case class HeartBeatState(generation:Int = 0, version:Int) {
   def updateVersion(version:Int) = {
-    heartBeat.incrementAndGet()
-    HeartBeatState(generation, version, heartBeat)
-  }
-
-  def updateHeartBeat(version:Int) = {
-    heartBeat.incrementAndGet()
-    HeartBeatState(generation, version, heartBeat)
+    HeartBeatState(generation, version)
   }
 }

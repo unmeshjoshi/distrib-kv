@@ -4,7 +4,7 @@ import java.math.BigInteger
 import java.net.{InetSocketAddress, ServerSocket, Socket}
 import java.util
 
-import org.dist.kvstore.{GossipDigest, GossipDigestSyn, Header, InetAddressAndPort, JsonSerDes, Message,RowMutation, RowMutationResponse, Stage, Verb}
+import org.dist.kvstore.{EndPointState, GossipDigest, GossipDigestSyn, Header, InetAddressAndPort, JsonSerDes, Message, RowMutation, RowMutationResponse, Stage, Verb}
 import org.dist.util.SocketIO
 import org.slf4j.LoggerFactory
 
@@ -59,7 +59,7 @@ class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageServic
       val gossipDigestSyn = JsonSerDes.deserialize(synMessage.payloadJson.getBytes, classOf[GossipDigestSyn])
 
       val deltaGossipDigest = new util.ArrayList[GossipDigest]()
-      val deltaEndPointStates = new util.HashMap[InetAddressAndPort, BigInteger]()
+      val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
       gossiper.examineGossiper(gossipDigestSyn.gDigests, deltaGossipDigest, deltaEndPointStates)
 
       val synAckMessage = gossiper.makeGossipDigestAckMessage(deltaGossipDigest, deltaEndPointStates)
@@ -71,13 +71,13 @@ class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageServic
   class GossipDigestSynAckHandler(gossiper: Gossiper, messagingService: MessagingService) {
     def handleMessage(synAckMessage: Message): Unit = {
       val gossipDigestSynAck: GossipDigestAck = JsonSerDes.deserialize(synAckMessage.payloadJson.getBytes, classOf[GossipDigestAck])
-      val epStateMap: Map[InetAddressAndPort, BigInteger] = gossipDigestSynAck.epStateMap
+      val epStateMap: Map[InetAddressAndPort, EndPointState] = gossipDigestSynAck.epStateMap
       if (epStateMap.size > 0) {
         gossiper.applyStateLocally(epStateMap)
       }
 
       /* Get the state required to send to this gossipee - construct GossipDigestAck2Message */
-      val deltaEpStateMap = new util.HashMap[InetAddressAndPort, BigInteger]
+      val deltaEpStateMap = new util.HashMap[InetAddressAndPort, EndPointState]
 
       for (gDigest <- gossipDigestSynAck.digestList) {
         val addr = gDigest.endPoint
@@ -107,9 +107,9 @@ trait MessageResponseHandler {
 
 
 case class GossipDigestAck(val digestList: List[GossipDigest],
-                           val epStateMap: Map[InetAddressAndPort, BigInteger])
+                           val epStateMap: Map[InetAddressAndPort, EndPointState])
 
-case class GossipDigestAck2(val epStateMap: Map[InetAddressAndPort, BigInteger])
+case class GossipDigestAck2(val epStateMap: Map[InetAddressAndPort, EndPointState])
 
 class MessagingService(val gossiper: Gossiper, storageService: StorageService) {
 

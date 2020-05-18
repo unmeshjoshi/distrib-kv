@@ -63,7 +63,7 @@ class Gossiper(private[kvstore] val generationNbr: Int,
   def initializeLocalEndpointState() = {
     var localState = endpointStatemap.get(localEndPoint)
     if (localState == null) {
-      val hbState = HeartBeatState(generationNbr, 0)
+      val hbState = HeartBeatState(generationNbr, versionGenerator.incrementAndGetVersion)
       localState = EndPointState(hbState, Collections.emptyMap())
       endpointStatemap.put(localEndPoint, localState)
     }
@@ -106,6 +106,7 @@ class Gossiper(private[kvstore] val generationNbr: Int,
               endpointStatemap.put(ep, newEndpointState)
               //TODO This has to be implemented
               /* apply ApplicationState */
+
 //              applyApplicationStateLocally(ep, localEpStatePtr, remoteState)
             }
           }
@@ -439,7 +440,7 @@ class Gossiper(private[kvstore] val generationNbr: Int,
 
     private def updateLocalHeartbeatCounter = {
       /* Update the local heartbeat counter. */
-      val state = endpointStatemap.get(localEndPoint)
+      val state: EndPointState = endpointStatemap.get(localEndPoint)
       val newState = state.copy(state.heartBeatState.updateVersion(versionGenerator.incrementAndGetVersion), updateTimeStamp = System.currentTimeMillis())
       endpointStatemap.put(localEndPoint, newState)
     }

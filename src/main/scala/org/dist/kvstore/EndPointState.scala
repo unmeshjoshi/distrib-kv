@@ -11,6 +11,10 @@ case class EndPointState(var heartBeatState: HeartBeatState,
                          isAlive:Boolean = true,
                          updateTimeStamp:Long = System.currentTimeMillis()) {
 
+  def getToken() = {
+    applicationStates.get(ApplicationState.TOKENS)
+  }
+
   def addApplicationState(key: ApplicationState, value: VersionedValue): EndPointState = {
     addApplicationStates(Collections.singletonMap(key, value))
   }

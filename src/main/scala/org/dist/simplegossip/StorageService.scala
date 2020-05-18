@@ -12,25 +12,10 @@ case class Table(name:String, kv:util.Map[String, String]) {
 }
 
 class StorageService(seed:InetAddressAndPort, clientListenAddress:InetAddressAndPort, val localEndPoint:InetAddressAndPort) {
-  val ReplicationFactor = 2
-
-  def getNStorageEndPointMap(key: String) = {
-    val token: BigInteger = FBUtilities.hash(key)
-    new RackUnawareStrategy(tokenMetadata).getStorageEndPoints(token, tokenMetadata.cloneTokenEndPointMap)
-  }
 
   private val logger = Logger.getLogger(classOf[StorageService])
 
   val tables = new util.HashMap[String, Table]()
-  def apply(rowMutation: RowMutation) = {
-    var table = tables.get(rowMutation.table)
-    if (table == null) {
-      table = new Table(rowMutation.table, new util.HashMap[String, String]())
-      tables.put(rowMutation.table, table)
-    }
-    table.put(rowMutation.key, rowMutation.value)
-    true
-  }
 
   val token = newToken()
   val tokenMetadata = new TokenMetadata()
@@ -51,4 +36,21 @@ class StorageService(seed:InetAddressAndPort, clientListenAddress:InetAddressAnd
     if (token.signum == -1) token = token.multiply(BigInteger.valueOf(-1L))
     token
   }
+
+  val ReplicationFactor = 2
+  def getNStorageEndPointMap(key: String) = {
+    val token: BigInteger = FBUtilities.hash(key)
+    new RackUnawareStrategy(tokenMetadata).getStorageEndPoints(token, tokenMetadata.cloneTokenEndPointMap)
+  }
+
+  def apply(rowMutation: RowMutation) = {
+    var table = tables.get(rowMutation.table)
+    if (table == null) {
+      table = new Table(rowMutation.table, new util.HashMap[String, String]())
+      tables.put(rowMutation.table, table)
+    }
+    table.put(rowMutation.key, rowMutation.value)
+    true
+  }
+
 }

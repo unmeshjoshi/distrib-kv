@@ -19,7 +19,7 @@ class GossiperTaskTest extends FunSuite {
     task.run()
 
     val state = gossiper.endpointStatemap.get(localEp)
-    assert(state.heartBeatState.heartBeat.get() == 2)
+    assert(state.heartBeatState.version == 3)
   }
 
   test("Should update heartbeat version when heartbeat is updated") {
@@ -36,6 +36,6 @@ class GossiperTaskTest extends FunSuite {
     task.run()
 
     val state = gossiper.endpointStatemap.get(localEp)
-    assert(state.heartBeatState.version == 2)
+    assert(state.heartBeatState.version == 3)
   }
 }

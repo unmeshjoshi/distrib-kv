@@ -1,8 +1,8 @@
 package org.dist.kvstore.testapp
 
-import org.dist.kvstore.testapp.Utils.createDbDir
 import org.dist.kvstore.{DatabaseConfiguration, InetAddressAndPort, StorageService}
 import org.dist.util.Networks
+import org.dist.util.Utils._
 
 object Node3 extends App {
   val localIpAddress = new Networks().ipv4Address

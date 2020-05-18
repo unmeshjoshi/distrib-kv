@@ -3,9 +3,8 @@ package org.dist.failuredetector.failuredetector
 import java.net.Socket
 
 import org.dist.api.RequestOrResponse
-import org.dist.kvstore.{InetAddressAndPort, JsonSerDes}
-import org.dist.failuredetector.failuredetector.heartbeat.{HeartBeatScheduler, Peer, PeerProxy}
 import org.dist.failuredetector.failuredetector.heartbeat.{Peer, PeerProxy}
+import org.dist.kvstore.{InetAddressAndPort, JsonSerDes}
 import org.dist.util.{Logging, SocketIO}
 
 class Receiver(localIp:InetAddressAndPort, peers:List[Peer], val failureDetector:FailureDetector[Int]) extends Logging {

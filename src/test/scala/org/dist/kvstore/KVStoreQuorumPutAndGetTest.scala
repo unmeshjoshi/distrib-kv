@@ -1,7 +1,7 @@
 package org.dist.kvstore
 
 import org.dist.kvstore.client.Client
-import org.dist.kvstore.testapp.Utils.createDbDir
+import org.dist.util.Utils._
 import org.dist.queue.TestUtils
 import org.dist.util.Networks
 import org.scalatest.FunSuite

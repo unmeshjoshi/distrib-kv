@@ -2,7 +2,7 @@ package org.dist.kvstore.testapp
 
 import org.dist.kvstore.{DatabaseConfiguration, InetAddressAndPort, StorageService}
 import org.dist.util.Networks
-import Utils._
+import org.dist.util.Utils._
 import org.dist.kvstore.testapp.GossipTestApp.localIpAddress
 
 object Node1 extends App {

@@ -1,9 +1,9 @@
 package org.dist.kvstore.testapp
 
 import org.dist.kvstore.client.Client
-import org.dist.kvstore.testapp.Utils._
 import org.dist.kvstore.{DatabaseConfiguration, InetAddressAndPort, StorageService}
 import org.dist.util.Networks
+import org.dist.util.Utils._
 
 object GossipTestApp extends App {
   val localIpAddress = new Networks().ipv4Address

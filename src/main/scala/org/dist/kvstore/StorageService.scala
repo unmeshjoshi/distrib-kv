@@ -9,12 +9,13 @@ import org.apache.log4j.Logger
 import org.dist.kvstore.locator.{AbstractStrategy, IReplicaPlacementStrategy, RackUnawareStrategy}
 
 
-
 class StorageService(clientListenAddress:InetAddressAndPort, controlListenAddress: InetAddressAndPort, val config: DatabaseConfiguration) extends IEndPointStateChangeSubscriber  {
 
   private val logger = Logger.getLogger(classOf[StorageService])
 
   val tables = new util.HashMap[String, Map[String, String]]()
+
+
   def apply(rowMutation: RowMutation) = {
     var kv: util.Map[String, String] = tables.get(rowMutation.table)
     if (kv == null) {
@@ -69,16 +70,9 @@ class StorageService(clientListenAddress:InetAddressAndPort, controlListenAddres
     storageProxy.start()
 
     /* Make sure this token gets gossiped around. */
-    val tokenForSelf = newToken()
+    val tokenForSelf = org.dist.util.Utils.newToken()
     gossiper.addApplicationState(ApplicationState.TOKENS, tokenForSelf.toString)
     tokenMetadata.update(tokenForSelf, controlListenAddress)
-  }
-
-  def newToken() = {
-    val guid = GuidGenerator.guid
-    var token = FBUtilities.hash(guid)
-    if (token.signum == -1) token = token.multiply(BigInteger.valueOf(-1L))
-    token
   }
 
   override def onChange(endpoint: InetAddressAndPort, epState: EndPointState): Unit = {

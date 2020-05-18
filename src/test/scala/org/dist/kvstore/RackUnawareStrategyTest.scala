@@ -16,7 +16,7 @@ class RackUnawareStrategyTest extends FunSuite {
     tokenMetadata.update(newToken(), InetAddressAndPort.create("10.10.10.14", 8000))
     val rackUnawareStrategy = new RackUnawareStrategy(tokenMetadata)
 
-    assert(2 == getEndPoints(rackUnawareStrategy, "5"))
+    assert(2 == getEndPoints(rackUnawareStrategy, "5").size)
   }
 
 

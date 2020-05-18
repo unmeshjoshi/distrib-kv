@@ -66,10 +66,10 @@ class PhiChiAccrualFailureDetector[T] extends FailureDetector[T] {
       return
     }
     val phi = hbWnd.phi(now)
-    if (logger.isTraceEnabled) {
+
       logger.info(s"PHI for ${ep} : ${phi}")
       logger.info(s"PHI_FACTOR * phi for ${ep} : ${PHI_FACTOR * phi} and PhiConvictThreshold:${getPhiConvictThreshold}")
-    }
+
     if (PHI_FACTOR * phi > getPhiConvictThreshold) {
       if (logger.isTraceEnabled) trace(s"Node ${ep} phi ${PHI_FACTOR * phi} > ${getPhiConvictThreshold}; intervals: ${hbWnd} mean: ${hbWnd.mean}ns")
       markDown(ep)
