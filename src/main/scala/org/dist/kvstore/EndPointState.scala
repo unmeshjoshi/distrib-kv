@@ -8,9 +8,8 @@ import scala.jdk.CollectionConverters._
 
 case class EndPointState(var heartBeatState: HeartBeatState,
                          applicationStates:Map[ApplicationState, VersionedValue] = new util.EnumMap[ApplicationState, VersionedValue](classOf[ApplicationState]),
-                         updateTimestamp:Long = System.nanoTime(),
                          isAlive:Boolean = true,
-                         updateTimeStamp:Long = System.currentTimeMillis()) {
+                         updateTimeStamp:Long = System.nanoTime()) {
 
   def addApplicationState(key: ApplicationState, value: VersionedValue): EndPointState = {
     addApplicationStates(Collections.singletonMap(key, value))

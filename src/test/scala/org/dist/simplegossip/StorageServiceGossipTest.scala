@@ -20,7 +20,7 @@ class StorageServiceGossipTest extends FunSuite {
 
     val storages = new java.util.ArrayList[StorageService]()
     val basePort = 8081
-    val serverCount = 5
+    val serverCount = 10
     for (i ← 1 to serverCount) {
       val clientAddress = InetAddressAndPort(localIp, TestUtils.choosePort())
       val storage = new StorageService(seedIp, clientAddress, InetAddressAndPort(localIp, basePort + i))

@@ -24,7 +24,9 @@ class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageServic
       logger.debug(s"Got message ${message}")
 
       if (message.header.verb == Verb.GOSSIP_DIGEST_SYN) {
-        new GossipDigestSynHandler(gossiper, messagingService).handleMessage(message)
+        val gossipDigestSyn = JsonSerDes.deserialize(message.payloadJson.getBytes, classOf[GossipDigestSyn])
+        val synAckMessage = new GossipDigestSynHandler(gossiper).handleMessage(gossipDigestSyn)
+        messagingService.sendTcpOneWay(synAckMessage, message.header.from)
 
       } else if (message.header.verb == Verb.GOSSIP_DIGEST_ACK) {
         new GossipDigestSynAckHandler(gossiper, messagingService).handleMessage(message)

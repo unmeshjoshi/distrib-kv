@@ -1,10 +1,11 @@
 package org.dist.simplegossip
 
-import org.dist.kvstore.{ApplicationState, EndPointState, GossipDigest, GossiperTestBuilder, HeartBeatState, InetAddressAndPort, Stage, TokenMetadata, Verb, VersionedValue}
+import java.util
+
+import org.dist.kvstore.{ApplicationState, EndPointState, GossipDigest, HeartBeatState, InetAddressAndPort, Stage, TokenMetadata, Verb, VersionedValue}
 import org.dist.simplegossip.builders.{GossipDigestBuilder, GossipSynMessageBuilder}
 import org.dist.util.Utils
 import org.scalatest.FunSuite
-import java.util
 
 import scala.jdk.CollectionConverters._
 
@@ -101,5 +102,90 @@ class GossiperTest extends FunSuite {
     assert(message.header.from == localEndpoint)
     assert(message.header.messageType == Stage.GOSSIP)
     assert(message.header.verb == Verb.GOSSIP_DIGEST_SYN)
+  }
+
+
+  test("should request all information from the endpoint if the state does not exist locally") {
+    val seed = InetAddressAndPort.create("127.0.0.1", 8000)
+    val localEndpoint = InetAddressAndPort.create("127.0.0.1", 8000)
+    val gossiper = new Gossiper(seed, localEndpoint, Utils.newToken(), new TokenMetadata())
+
+
+    val deltaGossipDigest = new util.ArrayList[GossipDigest]()
+    val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
+    val digest1 = GossipDigest(InetAddressAndPort.create("10.10.10.10", 8000), 1, 1)
+    val digest2 = GossipDigest(InetAddressAndPort.create("10.10.10.10", 8001), 1, 1)
+    gossiper.examineGossiper(util.Arrays.asList(digest1, digest2), deltaGossipDigest, deltaEndPointStates)
+
+    assert(deltaGossipDigest.size() == 2)
+    assert(deltaGossipDigest.get(0) == GossipDigest(InetAddressAndPort.create("10.10.10.10", 8000), 1, 0))
+    assert(deltaGossipDigest.get(1) == GossipDigest(InetAddressAndPort.create("10.10.10.10", 8001), 1, 0))
+  }
+
+  test("should request all for the versions which are missing locally") {
+    val seed = InetAddressAndPort.create("127.0.0.1", 8000)
+    val localEndpoint = InetAddressAndPort.create("127.0.0.1", 8000)
+    val gossiper = new Gossiper(seed, localEndpoint, Utils.newToken(), new TokenMetadata())
+    val server1Ep = InetAddressAndPort.create("10.10.10.10", 8000)
+    val server2Ep = InetAddressAndPort.create("10.10.10.10", 8001)
+
+    val ep1 = EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
+    gossiper.endpointStateMap.put(server1Ep, ep1)
+    val ep2 = EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
+    gossiper.endpointStateMap.put(server2Ep, ep2)
+
+    val deltaGossipDigest = new util.ArrayList[GossipDigest]()
+    val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
+    val digest1 = GossipDigest(server1Ep, 1, 4)
+    val digest2 = GossipDigest(server2Ep, 1, 5)
+    gossiper.examineGossiper(util.Arrays.asList(digest1, digest2), deltaGossipDigest, deltaEndPointStates)
+
+    assert(deltaGossipDigest.size() == 2)
+    assert(deltaGossipDigest.get(0) == GossipDigest(server1Ep, 1, 2))
+    assert(deltaGossipDigest.get(1) == GossipDigest(server2Ep, 1, 3))
+  }
+
+
+  test("should not send endPointStates which are missing in the remote digests") {
+    val seed = InetAddressAndPort.create("127.0.0.1", 8000)
+    val localEndpoint = InetAddressAndPort.create("127.0.0.1", 8000)
+    val gossiper = new Gossiper(seed, localEndpoint, Utils.newToken(), new TokenMetadata())
+    val server1Ep = InetAddressAndPort.create("10.10.10.10", 8000)
+    val server2Ep = InetAddressAndPort.create("10.10.10.10", 8001)
+
+    val ep1 = EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
+    gossiper.endpointStateMap.put(server1Ep, ep1)
+    val ep2 = EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
+    gossiper.endpointStateMap.put(server2Ep, ep2)
+
+    val deltaGossipDigest = new util.ArrayList[GossipDigest]()
+    val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
+    val digest1 = GossipDigest(server1Ep, 1, 4)
+    gossiper.examineGossiper(util.Arrays.asList(digest1), deltaGossipDigest, deltaEndPointStates)
+
+    assert(deltaEndPointStates.size() == 0)
+  }
+
+  test("should send endPointStates with higer version than in the digest") {
+    val seed = InetAddressAndPort.create("127.0.0.1", 8000)
+    val localEndpoint = InetAddressAndPort.create("127.0.0.1", 8000)
+    val gossiper = new Gossiper(seed, localEndpoint, Utils.newToken(), new TokenMetadata())
+    val server1Ep = InetAddressAndPort.create("10.10.10.10", 8000)
+    val server2Ep = InetAddressAndPort.create("10.10.10.10", 8001)
+
+    val ep1 = EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
+    gossiper.endpointStateMap.put(server1Ep, ep1)
+    val ep2 = EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
+    gossiper.endpointStateMap.put(server2Ep, ep2)
+
+    val deltaGossipDigest = new util.ArrayList[GossipDigest]()
+    val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
+    val digest1 = GossipDigest(server1Ep, 1, 4)
+    val digest2 = GossipDigest(server2Ep, 1, 1)
+    gossiper.examineGossiper(util.Arrays.asList(digest1,digest2), deltaGossipDigest, deltaEndPointStates)
+
+    assert(deltaEndPointStates.size() == 1)
+    assert(deltaEndPointStates.get(server2Ep).heartBeatState == HeartBeatState(1, 3))
+    assert(deltaEndPointStates.get(server2Ep).applicationStates.isEmpty == true)
   }
 }
