@@ -17,6 +17,7 @@ case class EndPointState(var heartBeatState: HeartBeatState,
 
   def addApplicationStates(values: util.Map[ApplicationState, VersionedValue]): EndPointState = {
     val applicationState: util.Map[ApplicationState, VersionedValue] = new util.EnumMap[ApplicationState, VersionedValue](classOf[ApplicationState])
+    applicationState.putAll(this.applicationStates)
     val states = values.keySet().asScala.toList
     for(state <- states) {
       applicationState.put(state, values.get(state))

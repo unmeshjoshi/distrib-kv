@@ -3,7 +3,9 @@ package org.dist.simplegossip.handlers
 import java.util
 
 import org.dist.kvstore.{EndPointState, InetAddressAndPort, JsonSerDes, Message}
-import org.dist.simplegossip.{GossipDigestAck, Gossiper, MessagingService}
+import org.dist.simplegossip.builders.GossipAck2MessageBuilder
+import org.dist.simplegossip.messages.GossipDigestAck
+import org.dist.simplegossip.{Gossiper, MessagingService}
 
 
 class GossipDigestSynAckHandler(gossiper: Gossiper, messagingService: MessagingService) {
@@ -16,14 +18,13 @@ class GossipDigestSynAckHandler(gossiper: Gossiper, messagingService: MessagingS
 
     /* Get the state required to send to this gossipee - construct GossipDigestAck2Message */
     val deltaEpStateMap = new util.HashMap[InetAddressAndPort, EndPointState]
-
     for (gDigest <- gossipDigestSynAck.digestList) {
       val addr = gDigest.endPoint
       val localEpStatePtr = gossiper.getStateForVersionBiggerThan(addr, gDigest.maxVersion)
       if (localEpStatePtr != null) deltaEpStateMap.put(addr, localEpStatePtr)
     }
 
-    val ack2Message = gossiper.makeGossipDigestAck2Message(deltaEpStateMap)
+    val ack2Message = new GossipAck2MessageBuilder(gossiper.localEndPoint).build(deltaEpStateMap)
     messagingService.sendTcpOneWay(ack2Message, synAckMessage.header.from)
   }
 }

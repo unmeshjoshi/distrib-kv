@@ -4,7 +4,9 @@ import java.util
 import java.util.{Collections, Random}
 
 import scala.jdk.CollectionConverters._
-import org.dist.kvstore.{EndPointState, GossipDigest, InetAddressAndPort}
+import org.dist.kvstore.{EndPointState, InetAddressAndPort}
+import org.dist.simplegossip.messages
+import org.dist.simplegossip.messages.GossipDigest
 import org.dist.util.Logging
 
 
@@ -36,9 +38,9 @@ class GossipDigestBuilder(localEndPoint: InetAddressAndPort,
       if (epState != null) {
         generation = epState.heartBeatState.generation
         maxVersion = epState.getMaxEndPointStateVersion
-        digests.add(GossipDigest(liveEndPoint, generation, maxVersion))
+        digests.add(messages.GossipDigest(liveEndPoint, generation, maxVersion))
       }
-      else digests.add(GossipDigest(liveEndPoint, 0, 0)) //we do not have any version of any value for this endpoint.
+      else digests.add(messages.GossipDigest(liveEndPoint, 0, 0)) //we do not have any version of any value for this endpoint.
     }
 
     log(digests)

@@ -7,6 +7,7 @@ import java.util.{ArrayList, Collections, List, Random, Set}
 
 import org.dist.failuredetector.failuredetector.PhiChiAccrualFailureDetector
 import org.dist.simplegossip.builders.{GossipDigestBuilder, GossipSynMessageBuilder}
+import org.dist.simplegossip.messages.GossipDigest
 import org.dist.util.Logging
 import org.slf4j.LoggerFactory
 
@@ -434,25 +435,4 @@ class Gossiper(private[kvstore] val generationNbr: Int,
       endpointStatemap.put(localEndPoint, newState)
     }
   }
-
-  class GossipSynAckMessageBuilder {
-
-    def makeGossipDigestAckMessage(deltaGossipDigest: util.ArrayList[GossipDigest], deltaEndPointStates: util.Map[InetAddressAndPort, EndPointState]) = {
-      val map = deltaEndPointStates.asScala.toMap
-      val gossipDigestAck = GossipDigestAck.create(deltaGossipDigest.asScala.toList, map)
-      val header = Header(localEndPoint, Stage.GOSSIP, Verb.GOSSIP_DIGEST_ACK)
-      Message(header, JsonSerDes.serialize(gossipDigestAck))
-    }
-  }
-
-
-  class GossipAck2MessageBuilder {
-
-    def makeGossipDigestAck2Message(deltaEndPointStates: util.Map[InetAddressAndPort, EndPointState]) = {
-      val gossipDigestAck2 = GossipDigestAck2.create(deltaEndPointStates.asScala.toMap)
-      val header = Header(localEndPoint, Stage.GOSSIP, Verb.GOSSIP_DIGEST_ACK2)
-      Message(header, JsonSerDes.serialize(gossipDigestAck2))
-    }
-  }
-
 }

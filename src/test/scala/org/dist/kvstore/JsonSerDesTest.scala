@@ -1,5 +1,7 @@
 package org.dist.kvstore
 
+
+import org.dist.simplegossip.messages.GossipDigestAck
 import org.scalatest.FunSuite
 
 class JsonSerDesTest extends FunSuite {

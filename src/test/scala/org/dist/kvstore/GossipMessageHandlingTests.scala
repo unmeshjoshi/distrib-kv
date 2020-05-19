@@ -4,7 +4,9 @@ import java.math.BigInteger
 import java.util
 
 import org.dist.kvstore
+import org.dist.simplegossip.messages.{GossipDigest, GossipDigestSyn}
 import org.scalatest.FunSuite
+
 import scala.jdk.CollectionConverters._
 
 class GossipMessageHandlingTests extends FunSuite {
@@ -112,7 +114,7 @@ class GossipMessageHandlingTests extends FunSuite {
   }
 
   private def gossipDigest(host: String, port: Int, generation: Int = 1, maxVersion: Int = 0) = {
-    kvstore.GossipDigest(InetAddressAndPort.create(host, port), generation, maxVersion)
+    GossipDigest(InetAddressAndPort.create(host, port), generation, maxVersion)
   }
 
   def newToken() = {

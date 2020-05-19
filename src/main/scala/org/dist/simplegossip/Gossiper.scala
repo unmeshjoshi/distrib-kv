@@ -5,7 +5,9 @@ import java.util
 import java.util.concurrent.{ConcurrentHashMap, ScheduledThreadPoolExecutor, TimeUnit}
 import java.util.{Collections, Random}
 
-import org.dist.kvstore.{ApplicationState, EndPointState, GossipDigest, GossipDigestSyn, Header, HeartBeatState, InetAddressAndPort, JsonSerDes, Message, Stage, TokenMetadata, Verb, VersionGenerator, VersionedValue}
+import org.dist.failuredetector.failuredetector.PhiChiAccrualFailureDetector
+import org.dist.kvstore.{ApplicationState, EndPointState, Header, HeartBeatState, InetAddressAndPort, JsonSerDes, Message, Stage, TokenMetadata, Verb, VersionGenerator, VersionedValue}
+import org.dist.simplegossip.messages.{GossipDigest, GossipDigestSyn}
 import org.dist.util.Logging
 
 import scala.jdk.CollectionConverters._
@@ -18,6 +20,7 @@ class Gossiper(val seed: InetAddressAndPort,
                val executor: ScheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(1)) extends Logging {
   private[simplegossip] val seeds = if (seed == localEndPoint) List() else List(seed)
   val versionGenerator = new VersionGenerator()
+  val fd = new PhiChiAccrualFailureDetector[InetAddressAndPort]()
 
   def initializeLocalEndpointState() = {
     var localState = endpointStateMap.get(localEndPoint)
@@ -36,12 +39,6 @@ class Gossiper(val seed: InetAddressAndPort,
     endpointStateMap.put(localEndPoint, newState)
   }
 
-  def makeGossipDigestAck2Message(deltaEpStateMap: util.HashMap[InetAddressAndPort, EndPointState]) = {
-    val gossipDigestAck2 = GossipDigestAck2(deltaEpStateMap.asScala.toMap)
-    val header = Header(localEndPoint, Stage.GOSSIP, Verb.GOSSIP_DIGEST_ACK2)
-    Message(header, JsonSerDes.serialize(gossipDigestAck2))
-  }
-
   def handleNewJoin(ep: InetAddressAndPort, endPointState: EndPointState) = {
     this.liveEndpoints.add(ep)
     this.endpointStateMap.put(ep, endPointState)
@@ -50,6 +47,37 @@ class Gossiper(val seed: InetAddressAndPort,
     info(s"${ep} joined ${localEndPoint} ")
   }
 
+
+  def notifyFailureDetector(remoteEpStateMap: util.Map[InetAddressAndPort, EndPointState]): Unit = {
+    val endpoints = remoteEpStateMap.keySet
+    for (endpoint <- endpoints.asScala) {
+      val remoteEndPointState = remoteEpStateMap.get(endpoint)
+      val localEndPointState = endpointStateMap.get(endpoint)
+      /*
+                   * If the local endpoint state exists then report to the FD only
+                   * if the versions workout.
+                  */
+      if (localEndPointState != null) {
+        val localGeneration = localEndPointState.heartBeatState.generation
+        val remoteGeneration = remoteEndPointState.heartBeatState.generation
+        if (remoteGeneration > localGeneration) {
+          info("Reporting " + endpoint + " to the FD.")
+          fd.report(endpoint)
+          //          continue //todo: continue is not supported
+
+        }
+        if (remoteGeneration == localGeneration) {
+          val localVersion = localEndPointState.getMaxEndPointStateVersion()
+          //int localVersion = localEndPointState.getHeartBeatState().getHeartBeatVersion();
+          val remoteVersion = remoteEndPointState.heartBeatState.version
+          if (remoteVersion > localVersion) {
+            info("Reporting " + endpoint + " to the FD.")
+            fd.report(endpoint)
+          }
+        }
+      }
+    }
+  }
   def applyStateLocally(epStateMap: Map[InetAddressAndPort, EndPointState]) = {
     val endPoints = epStateMap.keySet
     for (ep ← endPoints) {
@@ -68,7 +96,8 @@ class Gossiper(val seed: InetAddressAndPort,
           localValue == null || remoteValue.version > localValue.version
         })
 
-        localAppStates.addApplicationStates(updatedStates.asJava)
+        val updatedEnpointStates = localAppStates.addApplicationStates(updatedStates.asJava)
+        endpointStateMap.put(ep, updatedEnpointStates)
       }
     }
   }
@@ -86,12 +115,6 @@ class Gossiper(val seed: InetAddressAndPort,
     localState
   }
 
-
-  def makeGossipDigestAckMessage(deltaGossipDigest: util.ArrayList[GossipDigest], deltaEndPointStates: util.HashMap[InetAddressAndPort, EndPointState]) = {
-    val digestAck = GossipDigestAck(deltaGossipDigest.asScala.toList, deltaEndPointStates.asScala.toMap)
-    val header = Header(localEndPoint, Stage.GOSSIP, Verb.GOSSIP_DIGEST_ACK)
-    Message(header, JsonSerDes.serialize(digestAck))
-  }
 
   def examineGossiper(digestList: util.List[GossipDigest], deltaGossipDigest: util.ArrayList[GossipDigest], deltaEndPointStates: util.HashMap[InetAddressAndPort, EndPointState]) = {
     for (gDigest <- digestList.asScala) {
@@ -247,7 +270,7 @@ class Gossiper(val seed: InetAddressAndPort,
 
     def localDigest() = {
       var epState = endpointStateMap.get(localEndPoint)
-      GossipDigest(localEndPoint, 1, 1)
+      messages.GossipDigest(localEndPoint, 1, 1)
     }
 
     def makeRandomGossipDigest() = {
@@ -263,11 +286,10 @@ class Gossiper(val seed: InetAddressAndPort,
       for (liveEndPoint <- endpoints.asScala) {
         val epState = endpointStateMap.get(liveEndPoint)
         if (epState != null) {
-          digests.add(GossipDigest(liveEndPoint, 1, epState.getMaxEndPointStateVersion()))
+          digests.add(messages.GossipDigest(liveEndPoint, 1, epState.getMaxEndPointStateVersion()))
         }
       }
       digests.asScala.toList.asJava
     }
   }
-
 }

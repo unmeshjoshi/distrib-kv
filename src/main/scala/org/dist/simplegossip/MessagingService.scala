@@ -1,11 +1,11 @@
 package org.dist.simplegossip
 
-import java.math.BigInteger
 import java.net.{InetSocketAddress, ServerSocket, Socket}
 import java.util
 
-import org.dist.kvstore.{EndPointState, GossipDigest, GossipDigestSyn, Header, InetAddressAndPort, JsonSerDes, Message, RowMutation, RowMutationResponse, Stage, Verb}
-import org.dist.simplegossip.handlers.{GossipDigestSynAckHandler, GossipDigestSynHandler}
+import org.dist.kvstore.{EndPointState, InetAddressAndPort, JsonSerDes, Message, Verb}
+import org.dist.simplegossip.handlers.{GossipDigestAck2Handler, GossipDigestSynAckHandler, GossipDigestSynHandler, RowMutationHandler}
+import org.dist.simplegossip.messages.{GossipDigest, GossipDigestSyn}
 import org.dist.util.SocketIO
 import org.slf4j.LoggerFactory
 
@@ -40,44 +40,16 @@ class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageServic
         if (handler != null) handler.response(message)
 
       } else if (message.header.verb == Verb.ROW_MUTATION) {
-        new RowMutationHandler(storageService, messagingService).handleMessage(message)
+        new RowMutationHandler(localEp, storageService, messagingService).handleMessage(message)
       }
     }
   }
-
-
-
-  class RowMutationHandler(storageService: StorageService, messagingService: MessagingService) {
-    def handleMessage(rowMutationMessage: Message) = {
-      val rowMutation = JsonSerDes.deserialize(rowMutationMessage.payloadJson.getBytes, classOf[RowMutation])
-      val success = storageService.apply(rowMutation)
-      val response = RowMutationResponse(1, rowMutation.key, success)
-      val responseMessage = Message(Header(localEp, Stage.RESPONSE_STAGE, Verb.RESPONSE, rowMutationMessage.header.id), JsonSerDes.serialize(response))
-      messagingService.sendTcpOneWay(responseMessage, rowMutationMessage.header.from)
-    }
-  }
-
-
-  class GossipDigestAck2Handler(gossiper: Gossiper, messagingService: MessagingService) {
-    def handleMessage(ack2Message: Message): Unit = {
-      val gossipDigestAck2 = JsonSerDes.deserialize(ack2Message.payloadJson.getBytes, classOf[GossipDigestAck2])
-      val epStateMap = gossipDigestAck2.epStateMap
-      gossiper.applyStateLocally(epStateMap)
-    }
-  }
-
 }
 
 
 trait MessageResponseHandler {
   def response(msg: Message): Unit
 }
-
-
-case class GossipDigestAck(val digestList: List[GossipDigest],
-                           val epStateMap: Map[InetAddressAndPort, EndPointState])
-
-case class GossipDigestAck2(val epStateMap: Map[InetAddressAndPort, EndPointState])
 
 class MessagingService(val gossiper: Gossiper, storageService: StorageService) {
 

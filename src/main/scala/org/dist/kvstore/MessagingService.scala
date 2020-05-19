@@ -3,6 +3,8 @@ package org.dist.kvstore
 import java.net.{InetSocketAddress, ServerSocket, Socket}
 import java.util
 
+import org.dist.simplegossip.builders.{GossipAck2MessageBuilder, GossipSynAckMessageBuilder}
+import org.dist.simplegossip.messages.{GossipDigest, GossipDigestAck, GossipDigestAck2, GossipDigestSyn}
 import org.dist.util.{Logging, SocketIO}
 import org.slf4j.LoggerFactory
 
@@ -62,7 +64,7 @@ class TcpListener(localEp: InetAddressAndPort, storageService: StorageService, g
       gossiper.examineGossiper(gossipDigestSyn.gDigests, deltaGossipDigest, deltaEndPointStates)
       gossiper.notifyFailureDetector(gossipDigestSyn.gDigests)
 
-      val synAckMessage = new gossiper.GossipSynAckMessageBuilder().makeGossipDigestAckMessage(deltaGossipDigest, deltaEndPointStates)
+      val synAckMessage = new GossipSynAckMessageBuilder(localEp).build(deltaGossipDigest, deltaEndPointStates)
       messagingService.sendTcpOneWay(synAckMessage, synMessage.header.from)
     }
   }
@@ -71,7 +73,7 @@ class TcpListener(localEp: InetAddressAndPort, storageService: StorageService, g
   class GossipDigestSynAckHandler(gossiper: Gossiper, messagingService: MessagingService) {
     def handleMessage(synAckMessage: Message): Unit = {
       val gossipDigestSynAck = JsonSerDes.deserialize(synAckMessage.payloadJson.getBytes, classOf[GossipDigestAck])
-      val epStateMap = gossipDigestSynAck.stateMap.asJava
+      val epStateMap = gossipDigestSynAck.epStateMap.asJava
       if (epStateMap.size() > 0) {
         gossiper.notifyFailureDetector(epStateMap)
         gossiper.applyStateLocally(epStateMap)
@@ -86,7 +88,7 @@ class TcpListener(localEp: InetAddressAndPort, storageService: StorageService, g
         if (localEpStatePtr != null) deltaEpStateMap.put(addr, localEpStatePtr)
       }
 
-      val ack2Message = new gossiper.GossipAck2MessageBuilder().makeGossipDigestAck2Message(deltaEpStateMap)
+      val ack2Message = new GossipAck2MessageBuilder(gossiper.localEndPoint).build(deltaEpStateMap)
       messagingService.sendTcpOneWay(ack2Message, synAckMessage.header.from)
     }
   }
@@ -94,7 +96,7 @@ class TcpListener(localEp: InetAddressAndPort, storageService: StorageService, g
   class GossipDigestAck2Handler(gossiper: Gossiper, messagingService: MessagingService) {
     def handleMessage(ack2Message: Message): Unit = {
       val gossipDigestAck2 = JsonSerDes.deserialize(ack2Message.payloadJson.getBytes, classOf[GossipDigestAck2])
-      val epStateMap = gossipDigestAck2.stateMap
+      val epStateMap = gossipDigestAck2.epStateMap.asJava
       gossiper.notifyFailureDetector(epStateMap)
       gossiper.applyStateLocally(epStateMap)
     }

@@ -2,7 +2,8 @@ package org.dist.simplegossip.builders
 
 import java.util
 
-import org.dist.kvstore.{GossipDigest, GossipDigestSyn, Header, InetAddressAndPort, JsonSerDes, Message, Stage, Verb}
+import org.dist.kvstore.{Header, InetAddressAndPort, JsonSerDes, Message, Stage, Verb}
+import org.dist.simplegossip.messages.{GossipDigest, GossipDigestSyn}
 
 class GossipSynMessageBuilder(clusterName:String, localEndPoint:InetAddressAndPort) {
   def build(gDigests: util.List[GossipDigest]) = {
