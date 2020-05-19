@@ -105,10 +105,6 @@ class Gossiper(private[kvstore] val generationNbr: Int,
               resusitate(ep, localEpStatePtr)
               val newEndpointState = applyHeartBeatStateLocally(ep, localEpStatePtr, remoteState)
               endpointStatemap.put(ep, newEndpointState)
-              //TODO This has to be implemented
-              /* apply ApplicationState */
-
-//              applyApplicationStateLocally(ep, localEpStatePtr, remoteState)
             }
           }
         } else {

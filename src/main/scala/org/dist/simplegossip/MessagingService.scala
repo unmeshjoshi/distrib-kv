@@ -5,7 +5,7 @@ import java.net.{InetSocketAddress, ServerSocket, Socket}
 import java.util
 
 import org.dist.kvstore.{EndPointState, GossipDigest, GossipDigestSyn, Header, InetAddressAndPort, JsonSerDes, Message, RowMutation, RowMutationResponse, Stage, Verb}
-import org.dist.simplegossip.handlers.GossipDigestSynHandler
+import org.dist.simplegossip.handlers.{GossipDigestSynAckHandler, GossipDigestSynHandler}
 import org.dist.util.SocketIO
 import org.slf4j.LoggerFactory
 
@@ -57,28 +57,6 @@ class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageServic
     }
   }
 
-
-  class GossipDigestSynAckHandler(gossiper: Gossiper, messagingService: MessagingService) {
-    def handleMessage(synAckMessage: Message): Unit = {
-      val gossipDigestSynAck: GossipDigestAck = JsonSerDes.deserialize(synAckMessage.payloadJson.getBytes, classOf[GossipDigestAck])
-      val epStateMap: Map[InetAddressAndPort, EndPointState] = gossipDigestSynAck.epStateMap
-      if (epStateMap.size > 0) {
-        gossiper.applyStateLocally(epStateMap)
-      }
-
-      /* Get the state required to send to this gossipee - construct GossipDigestAck2Message */
-      val deltaEpStateMap = new util.HashMap[InetAddressAndPort, EndPointState]
-
-      for (gDigest <- gossipDigestSynAck.digestList) {
-        val addr = gDigest.endPoint
-        val localEpStatePtr = gossiper.getStateFor(addr)
-        if (localEpStatePtr != null) deltaEpStateMap.put(addr, localEpStatePtr)
-      }
-
-      val ack2Message = gossiper.makeGossipDigestAck2Message(deltaEpStateMap)
-      messagingService.sendTcpOneWay(ack2Message, synAckMessage.header.from)
-    }
-  }
 
   class GossipDigestAck2Handler(gossiper: Gossiper, messagingService: MessagingService) {
     def handleMessage(ack2Message: Message): Unit = {

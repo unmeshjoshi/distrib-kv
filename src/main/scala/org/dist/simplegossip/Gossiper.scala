@@ -53,12 +53,37 @@ class Gossiper(val seed: InetAddressAndPort,
   def applyStateLocally(epStateMap: Map[InetAddressAndPort, EndPointState]) = {
     val endPoints = epStateMap.keySet
     for (ep ← endPoints) {
-      val remoteToken = epStateMap(ep)
-      val token = this.endpointStateMap.get(ep)
-      if (token == null) {
-        handleNewJoin(ep, remoteToken)
+      val remoteEndpointState = epStateMap(ep)
+      val localEndpointState = this.endpointStateMap.get(ep)
+      if (localEndpointState == null) {
+        handleNewJoin(ep, remoteEndpointState)
+
+      } else { //we already have some state, apply the higher versions sent by remote.
+        val localAppStates = applyHeartBeatStateLocally(ep, localEndpointState, remoteEndpointState)
+        val remoteAppStates = remoteEndpointState.applicationStates
+        val updatedStates = remoteAppStates.asScala.filter(keyValue => {
+          val key = keyValue._1
+          val remoteValue = keyValue._2
+          val localValue = localAppStates.applicationStates.get(key)
+          localValue == null || remoteValue.version > localValue.version
+        })
+
+        localAppStates.addApplicationStates(updatedStates.asJava)
       }
     }
+  }
+
+  private def applyHeartBeatStateLocally(addr: InetAddressAndPort, localState: EndPointState, remoteState: EndPointState): EndPointState = {
+    val localHbState = localState.heartBeatState
+    val remoteHbState = remoteState.heartBeatState
+    if (remoteHbState.version > localHbState.version) {
+      val oldVersion = localHbState.version
+
+      debug("Updating heartbeat state version to " + localState.heartBeatState.version + " from " + oldVersion + " for " + addr + " ...")
+      return localState.copy(remoteHbState, updateTimeStamp = System.currentTimeMillis())
+    }
+
+    localState
   }
 
 
@@ -97,7 +122,7 @@ class Gossiper(val seed: InetAddressAndPort,
     }
   }
 
-  private def getStateForVersionBiggerThan(forEndpoint: InetAddressAndPort, version: Int) = {
+  def getStateForVersionBiggerThan(forEndpoint: InetAddressAndPort, version: Int) = {
     val epState = endpointStateMap.get(forEndpoint)
     var reqdEndPointState: EndPointState = null
     if (epState != null) {
