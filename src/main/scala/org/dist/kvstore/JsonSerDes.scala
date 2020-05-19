@@ -3,7 +3,7 @@ package org.dist.kvstore
 import com.fasterxml.jackson.annotation.{JsonAutoDetect, PropertyAccessor}
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.module.SimpleModule
-import com.fasterxml.jackson.databind.{DeserializationContext, DeserializationFeature, JavaType, KeyDeserializer, ObjectMapper, SerializationFeature}
+import com.fasterxml.jackson.databind._
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import com.fasterxml.jackson.module.scala.experimental.ScalaObjectMapper
 

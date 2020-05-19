@@ -3,15 +3,13 @@ package org.dist.kvstore
 import java.net.{InetSocketAddress, ServerSocket, Socket}
 import java.util
 
-import org.dist.simplegossip.builders.{GossipAck2MessageBuilder, GossipSynAckMessageBuilder}
-import org.dist.simplegossip.messages.{GossipDigest, GossipDigestAck, GossipDigestAck2, GossipDigestSyn}
-import org.dist.util.{Logging, SocketIO}
+import org.dist.kvstore.handlers.{GossipDigestAck2Handler, GossipDigestSynAckHandler, GossipDigestSynHandler, RowMutationHandler}
+import org.dist.kvstore.messages.{GossipDigest, GossipDigestSyn}
+import org.dist.util.SocketIO
 import org.slf4j.LoggerFactory
 
-import scala.jdk.CollectionConverters._
-
-class TcpListener(localEp: InetAddressAndPort, storageService: StorageService, gossiper: Gossiper, messagingService: MessagingService) extends Thread {
-  private[kvstore] val logger = LoggerFactory.getLogger(classOf[TcpListener])
+class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageService: StorageService, messagingService: MessagingService) extends Thread {
+  private val logger = LoggerFactory.getLogger(classOf[TcpListener])
 
   override def run(): Unit = {
     val serverSocket = new ServerSocket()
@@ -25,7 +23,9 @@ class TcpListener(localEp: InetAddressAndPort, storageService: StorageService, g
       logger.debug(s"Got message ${message}")
 
       if (message.header.verb == Verb.GOSSIP_DIGEST_SYN) {
-        new GossipDigestSynHandler(gossiper, messagingService).handleMessage(message)
+        val gossipDigestSyn = JsonSerDes.deserialize(message.payloadJson.getBytes, classOf[GossipDigestSyn])
+        val synAckMessage = new GossipDigestSynHandler(gossiper).handleMessage(gossipDigestSyn)
+        messagingService.sendTcpOneWay(synAckMessage, message.header.from)
 
       } else if (message.header.verb == Verb.GOSSIP_DIGEST_ACK) {
         new GossipDigestSynAckHandler(gossiper, messagingService).handleMessage(message)
@@ -33,75 +33,16 @@ class TcpListener(localEp: InetAddressAndPort, storageService: StorageService, g
       } else if (message.header.verb == Verb.GOSSIP_DIGEST_ACK2) {
         new GossipDigestAck2Handler(gossiper, messagingService).handleMessage(message)
 
-      } else if (message.header.verb == Verb.ROW_MUTATION) {
-        new RowMutationHandler(storageService, messagingService).handleMessage(message)
-
       } else if(message.header.verb == Verb.RESPONSE) {
 
         val handler = messagingService.callbackMap.get(message.header.id)
         if (handler != null) handler.response(message)
 
+      } else if (message.header.verb == Verb.ROW_MUTATION) {
+        new RowMutationHandler(localEp, storageService, messagingService).handleMessage(message)
       }
     }
   }
-
-  class RowMutationHandler(storageService: StorageService, messagingService: MessagingService) {
-    def handleMessage(rowMutationMessage: Message) = {
-      val rowMutation = JsonSerDes.deserialize(rowMutationMessage.payloadJson.getBytes, classOf[RowMutation])
-      val success = storageService.apply(rowMutation)
-      val response = RowMutationResponse(1, rowMutation.key, success)
-      val responseMessage = Message(Header(localEp, Stage.RESPONSE_STAGE, Verb.RESPONSE, rowMutationMessage.header.id), JsonSerDes.serialize(response))
-      messagingService.sendTcpOneWay(responseMessage, rowMutationMessage.header.from)
-    }
-  }
-
-  class GossipDigestSynHandler(gossiper: Gossiper, messagingService: MessagingService) {
-    def handleMessage(synMessage: Message): Unit = {
-      val gossipDigestSyn = JsonSerDes.deserialize(synMessage.payloadJson.getBytes, classOf[GossipDigestSyn])
-
-      val deltaGossipDigest = new util.ArrayList[GossipDigest]()
-      val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
-      gossiper.examineGossiper(gossipDigestSyn.gDigests, deltaGossipDigest, deltaEndPointStates)
-      gossiper.notifyFailureDetector(gossipDigestSyn.gDigests)
-
-      val synAckMessage = new GossipSynAckMessageBuilder(localEp).build(deltaGossipDigest, deltaEndPointStates)
-      messagingService.sendTcpOneWay(synAckMessage, synMessage.header.from)
-    }
-  }
-
-
-  class GossipDigestSynAckHandler(gossiper: Gossiper, messagingService: MessagingService) {
-    def handleMessage(synAckMessage: Message): Unit = {
-      val gossipDigestSynAck = JsonSerDes.deserialize(synAckMessage.payloadJson.getBytes, classOf[GossipDigestAck])
-      val epStateMap = gossipDigestSynAck.epStateMap.asJava
-      if (epStateMap.size() > 0) {
-        gossiper.notifyFailureDetector(epStateMap)
-        gossiper.applyStateLocally(epStateMap)
-      }
-
-      /* Get the state required to send to this gossipee - construct GossipDigestAck2Message */
-      val deltaEpStateMap = new util.HashMap[InetAddressAndPort, EndPointState]
-
-      for (gDigest <- gossipDigestSynAck.digestList) {
-        val addr = gDigest.endPoint
-        val localEpStatePtr = gossiper.getStateForVersionBiggerThan(addr, gDigest.maxVersion)
-        if (localEpStatePtr != null) deltaEpStateMap.put(addr, localEpStatePtr)
-      }
-
-      val ack2Message = new GossipAck2MessageBuilder(gossiper.localEndPoint).build(deltaEpStateMap)
-      messagingService.sendTcpOneWay(ack2Message, synAckMessage.header.from)
-    }
-  }
-
-  class GossipDigestAck2Handler(gossiper: Gossiper, messagingService: MessagingService) {
-    def handleMessage(ack2Message: Message): Unit = {
-      val gossipDigestAck2 = JsonSerDes.deserialize(ack2Message.payloadJson.getBytes, classOf[GossipDigestAck2])
-      val epStateMap = gossipDigestAck2.epStateMap.asJava
-      gossiper.notifyFailureDetector(epStateMap)
-      gossiper.applyStateLocally(epStateMap)
-    }
-  }
-
 }
 
 
@@ -109,18 +50,18 @@ trait MessageResponseHandler {
   def response(msg: Message): Unit
 }
 
+class MessagingService(val gossiper: Gossiper, storageService: StorageService) {
 
-class MessagingService(storageService: StorageService) extends Logging {
+  gossiper.setMessageService(this)
+
   val callbackMap = new util.HashMap[String, MessageResponseHandler]()
-  var gossiper: Gossiper = _
 
-  def init(gossiper: Gossiper): Unit = {
-    this.gossiper = gossiper
+  def init(): Unit = {
   }
 
   def listen(localEp: InetAddressAndPort): Unit = {
     assert(gossiper != null)
-    new TcpListener(localEp, storageService, gossiper, this).start()
+    new TcpListener(localEp, gossiper, storageService, this).start()
   }
 
   def sendRR(message: Message, to: List[InetAddressAndPort], messageResponseHandler: MessageResponseHandler): Unit = {
@@ -129,12 +70,8 @@ class MessagingService(storageService: StorageService) extends Logging {
   }
 
   def sendTcpOneWay(message: Message, to: InetAddressAndPort) = {
-    try {
-      val clientSocket = new Socket(to.address, to.port)
-      new SocketIO[Message](clientSocket, classOf[Message]).write(message)
-    } catch {
-      case e:Exception ⇒ error(s"Error connecting to ${to}. It might be down")
-    }
+    val clientSocket = new Socket(to.address, to.port)
+    new SocketIO[Message](clientSocket, classOf[Message]).write(message)
   }
 
   def sendUdpOneWay(message: Message, to: InetAddressAndPort) = {

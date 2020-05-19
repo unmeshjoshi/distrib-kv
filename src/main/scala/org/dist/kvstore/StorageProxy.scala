@@ -1,13 +1,11 @@
 package org.dist.kvstore
 
-import java.net.{InetSocketAddress, ServerSocket, Socket}
-import java.util
-import java.util.Map
+import java.net.{InetSocketAddress, ServerSocket}
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.locks.{Condition, Lock, ReentrantLock}
+import java.util.concurrent.locks.ReentrantLock
 
-import org.dist.util.SocketIO
+import org.dist.util.{Networks, SocketIO}
 import org.slf4j.LoggerFactory
 
 import scala.jdk.CollectionConverters._
@@ -22,7 +20,7 @@ class StorageProxy(clientRequestIp: InetAddressAndPort, storageService: StorageS
 
 
 class TcpClientRequestListner(localEp: InetAddressAndPort, storageService:StorageService, messagingService:MessagingService) extends Thread {
-  private[kvstore] val logger = LoggerFactory.getLogger(classOf[TcpListener])
+  private val logger = LoggerFactory.getLogger(classOf[TcpListener])
 
   override def run(): Unit = {
     val serverSocket = new ServerSocket()
@@ -53,10 +51,11 @@ class TcpClientRequestListner(localEp: InetAddressAndPort, storageService:Storag
   class RowMutationHandler(storageService: StorageService) {
     def handleMessage(rowMutationMessage: Message) = {
       val rowMutation = JsonSerDes.deserialize(rowMutationMessage.payloadJson.getBytes, classOf[RowMutation])
-      val endpointMap = storageService.getNStorageEndPointMap(rowMutation.key)
-
-      val quorumResponseHandler = new QuorumResponseHandler(endpointMap.values().size(), new WriteResponseResolver())
-           messagingService.sendRR(rowMutationMessage, endpointMap.values().asScala.toList, quorumResponseHandler)
+      val serversHostingKey = storageService.getNStorageEndPointMap(rowMutation.key)
+      val quorumResponseHandler = new QuorumResponseHandler(serversHostingKey.size, new WriteResponseResolver())
+      val header = Header(storageService.localEndPoint, Stage.MUTATION, Verb.ROW_MUTATION)
+      val message = Message(header, rowMutationMessage.payloadJson)
+      messagingService.sendRR(message, serversHostingKey.toList, quorumResponseHandler)
       quorumResponseHandler.get()
     }
   }

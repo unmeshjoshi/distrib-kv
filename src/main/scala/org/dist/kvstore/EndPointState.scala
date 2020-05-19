@@ -1,9 +1,7 @@
 package org.dist.kvstore
 
-import java.math.BigInteger
 import java.util
 import java.util.{Collections, Map}
-
 import scala.jdk.CollectionConverters._
 
 case class EndPointState(var heartBeatState: HeartBeatState,

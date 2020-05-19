@@ -1,6 +1,6 @@
 package org.dist.kvstore.client
 
-import org.dist.kvstore._
+import org.dist.kvstore.{Header, InetAddressAndPort, JsonSerDes, Message, QuorumResponse, RowMutation, Stage, Verb}
 import org.dist.util.Networks
 
 class Client(bootstrapServer: InetAddressAndPort) {

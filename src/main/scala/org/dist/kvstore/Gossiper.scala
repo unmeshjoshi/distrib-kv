@@ -1,269 +1,69 @@
 package org.dist.kvstore
 
+import java.math.BigInteger
 import java.util
-import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.{ConcurrentHashMap, ScheduledThreadPoolExecutor, TimeUnit}
-import java.util.{ArrayList, Collections, List, Random, Set}
+import java.util.{Collections, Random}
 
-import org.dist.failuredetector.failuredetector.PhiChiAccrualFailureDetector
-import org.dist.simplegossip.builders.{GossipDigestBuilder, GossipSynMessageBuilder}
-import org.dist.simplegossip.messages.GossipDigest
+import org.dist.kvstore
+import org.dist.kvstore.failuredetector.PhiChiAccrualFailureDetector
+import org.dist.kvstore.messages.{GossipDigest, GossipDigestSyn}
 import org.dist.util.Logging
-import org.slf4j.LoggerFactory
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.Breaks
-import scala.util.control.Breaks.breakable
 
-trait IEndPointStateChangeSubscriber {
-  /**
-   * Use to inform interested parties about the change in the state
-   * for specified endpoint
-   *
-   * @param endpoint endpoint for which the state change occured.
-   * @param epState  state that actually changed for the above endpoint.
-   */
-  def onChange(endpoint: InetAddressAndPort, epState: EndPointState): Unit
-}
-
-class Gossiper(private[kvstore] val generationNbr: Int,
-               private[kvstore] val localEndPoint: InetAddressAndPort,
-               private[kvstore] val config: DatabaseConfiguration,
-               private[kvstore] val executor: ScheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(1),
-               private[kvstore] val messagingService: MessagingService,
-               private[kvstore] val liveEndpoints: util.List[InetAddressAndPort] = new util.ArrayList[InetAddressAndPort],
-               private[kvstore] val unreachableEndpoints: util.List[InetAddressAndPort] = new util.ArrayList[InetAddressAndPort]) extends Logging {
-
-  val failureDetector = new PhiChiAccrualFailureDetector[InetAddressAndPort]()
-
-  def suspect(ep: InetAddressAndPort) = {
-    val state = endpointStatemap.get(ep)
-    info(s"Marking ${ep} as suspected. Adding to unreachable endpoints")
-    endpointStatemap.put(ep, state.markSuspected())
-    liveEndpoints.remove(ep)
-    unreachableEndpoints.add(ep)
-  }
-
-
-  private[kvstore] val versionGenerator = new VersionGenerator()
-  private[kvstore] val seeds = config.nonLocalSeeds(localEndPoint)
-  private[kvstore] val endpointStatemap = new ConcurrentHashMap[InetAddressAndPort, EndPointState]
-  private val subscribers = new util.ArrayList[IEndPointStateChangeSubscriber]
-
-  private val taskLock = new ReentrantLock
-  private val random: Random = new Random
-
-  initializeLocalEndpointState()
-  private val intervalMillis = 1000
-
-  def addApplicationState(state: ApplicationState, value: String) = this.synchronized {
-    val localEndpointState = endpointStatemap.get(localEndPoint)
-    val newState = localEndpointState.addApplicationState(state, VersionedValue(value, versionGenerator.incrementAndGetVersion))
-    endpointStatemap.put(localEndPoint, newState)
-  }
+class Gossiper(val seed: InetAddressAndPort,
+               val localEndPoint: InetAddressAndPort,
+               val token: BigInteger,
+               val tokenMetadata: TokenMetadata,
+               val executor: ScheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(1)) extends Logging {
+  private[kvstore] val seeds = if (seed == localEndPoint) List() else List(seed)
+  val versionGenerator = new VersionGenerator()
+  val fd = new PhiChiAccrualFailureDetector[InetAddressAndPort]()
 
   def initializeLocalEndpointState() = {
-    var localState = endpointStatemap.get(localEndPoint)
+    var localState = endpointStateMap.get(localEndPoint)
     if (localState == null) {
-      val hbState = HeartBeatState(generationNbr, versionGenerator.incrementAndGetVersion)
-      localState = EndPointState(hbState, Collections.emptyMap())
-      endpointStatemap.put(localEndPoint, localState)
+      val hbState = HeartBeatState(0, versionGenerator.incrementAndGetVersion)
+      localState = kvstore.EndPointState(hbState, Collections.emptyMap())
+      endpointStateMap.put(localEndPoint, localState)
     }
-    messagingService.init(this)
-  }
-
-  def register (subscriber: IEndPointStateChangeSubscriber): Unit = {
-    subscribers.add (subscriber)
-  }
-
-  def start() = {
-    executor.scheduleAtFixedRate(new GossipTask, intervalMillis, intervalMillis, TimeUnit.MILLISECONDS)
-  }
-
-  def applyStateLocally(epStateMap: util.Map[InetAddressAndPort, EndPointState]): Unit = this.synchronized {
-    val eps = epStateMap.keySet.asScala
-    for (ep <- eps) {
-      breakable {
-        if (ep == localEndPoint)
-          Breaks.break()
-
-        val localEpStatePtr = endpointStatemap.get(ep)
-        val remoteState = epStateMap.get(ep)
-        /*
-                If state does not exist just add it. If it does then add it only if the version
-                of the remote copy is greater than the local copy.
-            */
-        if (localEpStatePtr != null) {
-          val localGeneration: Int = localEpStatePtr.heartBeatState.generation
-          val remoteGeneration: Int = remoteState.heartBeatState.generation
-          if (remoteGeneration > localGeneration)
-            handleNewJoin(ep, remoteState)
-          else if (remoteGeneration == localGeneration) {
-            /* manage the membership state */
-            val localMaxVersion = localEpStatePtr.getMaxEndPointStateVersion()
-            val remoteMaxVersion = remoteState.getMaxEndPointStateVersion()
-            if (remoteMaxVersion > localMaxVersion) {
-              resusitate(ep, localEpStatePtr)
-              val newEndpointState = applyHeartBeatStateLocally(ep, localEpStatePtr, remoteState)
-              endpointStatemap.put(ep, newEndpointState)
-            }
-          }
-        } else {
-          handleNewJoin(ep, remoteState)
-        }
-      }
-    }
-  }
-
-  def resusitate(addr: InetAddressAndPort, localState: EndPointState) = {
-    debug("Attempting to resusitate " + addr)
-    markLiveOrUnreachable(addr, localState, true)
-    debug("EndPoint " + addr + " is now UP")
-  }
-
-  def doNotifications(ep: InetAddressAndPort, epState: EndPointState): Unit = {
-    info(s"notifications for ${ep} ${epState}")
-    for(subscriber <- subscribers.asScala) {
-      subscriber.onChange(ep, epState)
-    }
-  }
-
-  private[kvstore] def applyHeartBeatStateLocally(addr: InetAddressAndPort, localState: EndPointState, remoteState: EndPointState): EndPointState = {
-    val localHbState = localState.heartBeatState
-    val remoteHbState = remoteState.heartBeatState
-    if (remoteHbState.generation > localHbState.generation) {
-      resusitate(addr, localState)
-      return localState.copy(remoteHbState, updateTimeStamp = System.currentTimeMillis())
-    }
-    if (localHbState.generation == remoteHbState.generation) {
-      if (remoteHbState.version > localHbState.version) {
-        val oldVersion = localHbState.version
-
-        debug("Updating heartbeat state version to " + localState.heartBeatState.version + " from " + oldVersion + " for " + addr + " ...")
-        return localState.copy(remoteHbState, updateTimeStamp = System.currentTimeMillis())
-      }
-    }
-    localState
-  }
-
-  private def handleNewJoin(ep: InetAddressAndPort, epState: EndPointState): Unit = {
-    info("Node " + ep + " has now joined.")
-    /* Mark this endpoint as "live" */
-    endpointStatemap.put(ep, epState)
-    markLiveOrUnreachable(ep, epState, true)
-    info(s"Enpoint State Map for ${localEndPoint} is ${endpointStatemap}")
-    /* Notify interested parties about endpoint state change */
-    doNotifications(ep, epState)
-  }
-
-  private[kvstore] def markLiveOrUnreachable(addr: InetAddressAndPort, epState: EndPointState, value: Boolean): Unit = {
-    if (value) {
-      liveEndpoints.add(addr)
-      unreachableEndpoints.remove(addr)
-    }
-    else {
-      liveEndpoints.remove(addr)
-      unreachableEndpoints.add(addr)
-    }
+    addApplicationState(ApplicationState.TOKENS, token.toString)
   }
 
 
-  /*
-        This method is used to figure the state that the Gossiper has but Gossipee doesn't. The delta digests
-        and the delta state are built up.
-    */
-  private[kvstore] def examineGossiper(digestList: util.List[GossipDigest], deltaGossipDigestList: util.List[GossipDigest], deltaEpStateMap: util.Map[InetAddressAndPort, EndPointState]): Unit = {
-    for (gDigest <- digestList.asScala) {
-      breakable {
-        val remoteGeneration = gDigest.generation
-        val maxRemoteVersion = gDigest.maxVersion
-        /* Get state associated with the end point in digest */
-        val endpointState = endpointStatemap.get(gDigest.endPoint)
-        /*
-      Here we need to fire a GossipDigestAckMessage. If we have some data associated with this endpoint locally
-      then we follow the "if" path of the logic. If we have absolutely nothing for this endpoint we need to
-      request all the data for this endpoint.
-     */ if (endpointState != null) {
-          val localGeneration = endpointState.heartBeatState.generation
-          val maxLocalVersion = endpointState.getMaxEndPointStateVersion()
-          if (remoteGeneration == localGeneration && maxRemoteVersion == maxLocalVersion) {
-            Breaks.break() //todo: continue is not supported}
-          }
-          if (remoteGeneration > localGeneration)
-          /* we request everything from the gossiper */
-            requestAll(gDigest, deltaGossipDigestList, remoteGeneration)
-          if (remoteGeneration < localGeneration)
-          /* send all data with generation = localgeneration and version > 0 */
-            sendAll(gDigest, deltaEpStateMap, 0)
-          if (remoteGeneration == localGeneration) {
-            /*
-                                 If the max remote version is greater then we request the remote endpoint send us all the data
-                                 for this endpoint with version greater than the max version number we have locally for this
-                                 endpoint.
-                                 If the max remote version is lesser, then we send all the data we have locally for this endpoint
-                                 with version greater than the max remote version.
-          */
-            if (maxRemoteVersion > maxLocalVersion)
-              info(s"MaxVersion ${maxRemoteVersion} is greater than ${maxLocalVersion} for ${gDigest.endPoint}. Asking for it")
-              deltaGossipDigestList.add(new GossipDigest(gDigest.endPoint, remoteGeneration, maxLocalVersion))
-            if (maxRemoteVersion < maxLocalVersion)
-            /* send all data with generation = localgeneration and version > maxRemoteVersion */
-              sendAll(gDigest, deltaEpStateMap, maxRemoteVersion)
-          }
-        }
-        else {
-          /* We are here since we have no data for this endpoint locally so request everthing. */
-          requestAll(gDigest, deltaGossipDigestList, remoteGeneration)
-        }
-      }
-    }
+  def addApplicationState(state: ApplicationState, value: String) = this.synchronized {
+    val localEndpointState = endpointStateMap.get(localEndPoint)
+    val newState = localEndpointState.addApplicationState(state, VersionedValue(value, versionGenerator.incrementAndGetVersion))
+    endpointStateMap.put(localEndPoint, newState)
   }
 
-  def notifyFailureDetector(gDigests: util.List[GossipDigest]): Unit = {
-    val fd = failureDetector
-    import scala.jdk.CollectionConverters._
-    for (gDigest <- gDigests.asScala) {
-      val localEndPointState = endpointStatemap.get(gDigest.endPoint)
-      /*
-                   * If the local endpoint state exists then report to the FD only
-                   * if the versions workout.
-                  */ if (localEndPointState != null) {
-        val localGeneration = endpointStatemap.get(gDigest.endPoint).heartBeatState.generation
-        val remoteGeneration = gDigest.generation
-        if (remoteGeneration > localGeneration) {
-          info("Reporting " + gDigest.endPoint + " to the FD.")
-          fd.report(gDigest.endPoint)
-//          continue //todo: continue is not supported
-        }
-        if (remoteGeneration == localGeneration) {
-          val localVersion = localEndPointState.getMaxEndPointStateVersion()
-          //int localVersion = endPointStateMap_.get(gDigest.endPoint_).getHeartBeatState().getHeartBeatVersion();
-          val remoteVersion = gDigest.maxVersion
-          if (remoteVersion > localVersion) {
-            info("Reporting " + gDigest.endPoint + " to the FD.")
-            fd.report(gDigest.endPoint)
-          }
-        }
-      }
-    }
+  def handleNewJoin(ep: InetAddressAndPort, endPointState: EndPointState) = {
+    this.liveEndpoints.add(ep)
+    this.endpointStateMap.put(ep, endPointState)
+    val versionedValue: VersionedValue = endPointState.applicationStates.get(ApplicationState.TOKENS)
+    tokenMetadata.update(new BigInteger(versionedValue.value), ep)
+    info(s"${ep} joined ${localEndPoint} ")
   }
+
 
   def notifyFailureDetector(remoteEpStateMap: util.Map[InetAddressAndPort, EndPointState]): Unit = {
-    val fd = failureDetector
     val endpoints = remoteEpStateMap.keySet
     for (endpoint <- endpoints.asScala) {
       val remoteEndPointState = remoteEpStateMap.get(endpoint)
-      val localEndPointState = endpointStatemap.get(endpoint)
+      val localEndPointState = endpointStateMap.get(endpoint)
       /*
                    * If the local endpoint state exists then report to the FD only
                    * if the versions workout.
-                  */ if (localEndPointState != null) {
+                  */
+      if (localEndPointState != null) {
         val localGeneration = localEndPointState.heartBeatState.generation
         val remoteGeneration = remoteEndPointState.heartBeatState.generation
         if (remoteGeneration > localGeneration) {
           info("Reporting " + endpoint + " to the FD.")
           fd.report(endpoint)
-//          continue //todo: continue is not supported
+          //          continue //todo: continue is not supported
 
         }
         if (remoteGeneration == localGeneration) {
@@ -278,33 +78,75 @@ class Gossiper(private[kvstore] val generationNbr: Int,
       }
     }
   }
+  def applyStateLocally(epStateMap: Map[InetAddressAndPort, EndPointState]) = {
+    val endPoints = epStateMap.keySet
+    for (ep ← endPoints) {
+      val remoteEndpointState = epStateMap(ep)
+      val localEndpointState = this.endpointStateMap.get(ep)
+      if (localEndpointState == null) {
+        handleNewJoin(ep, remoteEndpointState)
 
+      } else { //we already have some state, apply the higher versions sent by remote.
+        val localAppStates = applyHeartBeatStateLocally(ep, localEndpointState, remoteEndpointState)
+        val remoteAppStates = remoteEndpointState.applicationStates
+        val updatedStates = remoteAppStates.asScala.filter(keyValue => {
+          val key = keyValue._1
+          val remoteValue = keyValue._2
+          val localValue = localAppStates.applicationStates.get(key)
+          localValue == null || remoteValue.version > localValue.version
+        })
 
-  /**
-   * initial gossipdigest empty endpoint state
-   * endpoint state having same generation same version
-   * endpoint state having same generation lower version
-   * endpoint state having same generation higher version
-   * endpoint state having lower generation than remote
-   * send only endpoint state higher than the remote version
-   */
-
-  /* Request all the state for the endpoint in the gDigest */
-  private[kvstore] def requestAll(gDigest: GossipDigest, deltaGossipDigestList: util.List[GossipDigest], remoteGeneration: Int): Unit = {
-    /* We are here since we have no data for this endpoint locally so request everthing. */
-    deltaGossipDigestList.add(new GossipDigest(gDigest.endPoint, remoteGeneration, 0))
+        val updatedEnpointStates = localAppStates.addApplicationStates(updatedStates.asJava)
+        endpointStateMap.put(ep, updatedEnpointStates)
+      }
+    }
   }
 
-  /* Send all the data with version greater than maxRemoteVersion */
-  private[kvstore] def sendAll(gDigest: GossipDigest, deltaEpStateMap: util.Map[InetAddressAndPort, EndPointState], maxRemoteVersion: Int): Unit = {
-    val localEpStatePtr = getStateForVersionBiggerThan(gDigest.endPoint, maxRemoteVersion)
-    if (localEpStatePtr != null) deltaEpStateMap.put(gDigest.endPoint, localEpStatePtr)
+  private def applyHeartBeatStateLocally(addr: InetAddressAndPort, localState: EndPointState, remoteState: EndPointState): EndPointState = {
+    val localHbState = localState.heartBeatState
+    val remoteHbState = remoteState.heartBeatState
+    if (remoteHbState.version > localHbState.version) {
+      val oldVersion = localHbState.version
+
+      debug("Updating heartbeat state version to " + localState.heartBeatState.version + " from " + oldVersion + " for " + addr + " ...")
+      return localState.copy(remoteHbState, updateTimeStamp = System.currentTimeMillis())
+    }
+
+    localState
   }
 
-  import scala.util.control.Breaks._
 
-  private[kvstore] def getStateForVersionBiggerThan(forEndpoint: InetAddressAndPort, version: Int) = {
-    val epState = endpointStatemap.get(forEndpoint)
+  def examineGossiper(digestList: util.List[GossipDigest], deltaGossipDigest: util.ArrayList[GossipDigest], deltaEndPointStates: util.HashMap[InetAddressAndPort, EndPointState]) = {
+    for (gDigest <- digestList.asScala) {
+      Breaks.breakable {
+        val endpointState: EndPointState = endpointStateMap.get(gDigest.endPoint)
+        if (endpointState != null) {
+          val maxRemoteVersion = gDigest.maxVersion
+          val maxLocalVersion = endpointState.getMaxEndPointStateVersion()
+          if (maxRemoteVersion == maxLocalVersion) {
+            Breaks.break()
+          }
+
+          if (maxRemoteVersion < maxLocalVersion) {
+            info(s"MaxVersion ${maxRemoteVersion} is less than ${maxLocalVersion} for ${gDigest.endPoint}. Sending local state with higher versions to remote")
+
+            sendAll(gDigest, deltaEndPointStates, maxRemoteVersion)
+
+          } else if (maxRemoteVersion > maxLocalVersion) {
+
+            info(s"MaxVersion ${maxRemoteVersion} is greater than ${maxLocalVersion} for ${gDigest.endPoint}. Asking for it")
+            deltaGossipDigest.add(new GossipDigest(gDigest.endPoint, 1, maxLocalVersion))
+          }
+
+        } else {
+          requestAll(gDigest, deltaGossipDigest)
+        }
+      }
+    }
+  }
+
+  def getStateForVersionBiggerThan(forEndpoint: InetAddressAndPort, version: Int) = {
+    val epState = endpointStateMap.get(forEndpoint)
     var reqdEndPointState: EndPointState = null
     if (epState != null) {
       /*
@@ -314,7 +156,8 @@ class Gossiper(private[kvstore] val generationNbr: Int,
                   * in and some application state has a version that is greater
                   * than the version passed in. In this case we also send the old
                   * heart beat and throw it away on the receiver if it is redundant.
-                  */ val localHbVersion = epState.heartBeatState.version
+                  */
+      val localHbVersion = epState.heartBeatState.version
       if (localHbVersion > version) reqdEndPointState = EndPointState(epState.heartBeatState)
       val appStateMap = epState.applicationStates
       /* Accumulate all application states whose versions are greater than "version" variable */ val keys = appStateMap.keySet
@@ -329,58 +172,62 @@ class Gossiper(private[kvstore] val generationNbr: Int,
     reqdEndPointState
   }
 
+  /* Request all the state for the endpoint in the gDigest */
+  private def requestAll(gDigest: GossipDigest, deltaGossipDigestList: util.List[GossipDigest]): Unit = {
+    /* We are here since we have no data for this endpoint locally so request everthing. */
+    deltaGossipDigestList.add(new GossipDigest(gDigest.endPoint, 1, 0))
+  }
+
+  /* Send all the data with version greater than maxRemoteVersion */
+  private def sendAll(gDigest: GossipDigest, deltaEpStateMap: util.Map[InetAddressAndPort, EndPointState], maxRemoteVersion: Int = 0): Unit = {
+    val localEpStatePtr = getStateForVersionBiggerThan(gDigest.endPoint, maxRemoteVersion)
+    if (localEpStatePtr != null) deltaEpStateMap.put(gDigest.endPoint, localEpStatePtr)
+  }
+
+
+  private val random: Random = new Random
+  val liveEndpoints: util.List[InetAddressAndPort] = new util.ArrayList[InetAddressAndPort]
+  val unreachableEndpoints: util.List[InetAddressAndPort] = new util.ArrayList[InetAddressAndPort]
+
+  private val intervalMillis = 1000
+  //simple state
+  val endpointStateMap = new ConcurrentHashMap[InetAddressAndPort, EndPointState]
+
+  initializeLocalEndpointState()
+
+  def start() = {
+    executor.scheduleAtFixedRate(new GossipTask, intervalMillis, intervalMillis, TimeUnit.MILLISECONDS)
+  }
+
+  var messagingService: MessagingService = _
+
+  def setMessageService(messagingService: MessagingService): Unit = {
+    this.messagingService = messagingService
+  }
+
+  def getStateFor(addr: InetAddressAndPort) = {
+    endpointStateMap.get(addr)
+  }
+
+
   class GossipTask extends Runnable {
 
     @Override
     def run() = {
-      try {
-        //        //wait on messaging service to start listening
-        //        MessagingService.instance().waitUntilListening()
-        taskLock.lock()
+      val randomDigest = makeRandomGossipDigest()
 
-        updateLocalHeartbeatCounter
+      val gossipDigestSynMessage = makeGossipDigestSynMessage(randomDigest)
 
-        val randomDigest = new GossipDigestBuilder(localEndPoint, endpointStatemap, liveEndpoints).makeRandomGossipDigest()
-        val gossipDigestSynMessage = new GossipSynMessageBuilder(config.getClusterName(), localEndPoint).build(randomDigest)
-
-        val sentToSeedNode = doGossipToLiveMember(gossipDigestSynMessage)
-        /* Gossip to some unreachable member with some probability to check if he is back up */
-        doGossipToUnreachableMember(gossipDigestSynMessage)
-
-        if (!sentToSeedNode) { //If live members chosen to send gossip already had seed node, dont send message to seed
-          doGossipToSeed(gossipDigestSynMessage)
-        }
-
-        doStatusCheck()
-
-      } catch {
-        case ex:Exception => ex.printStackTrace()
-      } finally {
-        taskLock.unlock()
+      val sentToSeedNode = doGossipToLiveMember(gossipDigestSynMessage)
+      if (!sentToSeedNode) {
+        doGossipToSeed(gossipDigestSynMessage)
       }
     }
 
-    val aVeryLongTime_ = 259200 * 1000
-
-   def evictFromMembership(endpoint: InetAddressAndPort): Unit = {
-      unreachableEndpoints.remove(endpoint)
-    }
-
-    private def doStatusCheck(): Unit = {
-      val now = System.currentTimeMillis
-      val eps = endpointStatemap.keySet.asScala
-      import scala.jdk.CollectionConverters._
-      for (endpoint <- eps) {
-        if (endpoint != localEndPoint) { //continue //todo: continue is not supported
-        failureDetector.interpret(endpoint)
-        val epState = endpointStatemap.get(endpoint)
-        if (epState != null) {
-          val l = now - epState.updateTimeStamp
-          val duration = now - l
-          if (!epState.isAlive && (duration > aVeryLongTime_)) evictFromMembership(endpoint)
-        }
-        }
-      }
+    def makeGossipDigestSynMessage(gDigests: util.List[GossipDigest]) = {
+      val gDigestMessage = new GossipDigestSyn("TestCluster", gDigests)
+      val header = Header(localEndPoint, Stage.GOSSIP, Verb.GOSSIP_DIGEST_SYN)
+      Message(header, JsonSerDes.serialize(gDigestMessage))
     }
 
 
@@ -388,24 +235,21 @@ class Gossiper(private[kvstore] val generationNbr: Int,
       val size = seeds.size
       if (size > 0) {
         if (size == 1 && seeds.contains(localEndPoint)) return
-        if (liveEndpoints.size == 0) sendGossip(message, seeds)
+        if (liveEndpoints.size == 0) sendGossip(message, seeds.asJava)
         else {
           /* Gossip with the seed with some probability. */
           val probability = seeds.size / (liveEndpoints.size + unreachableEndpoints.size)
           val randDbl = random.nextDouble
-          if (randDbl <= probability) sendGossip(message, seeds)
+          if (randDbl <= probability) sendGossip(message, seeds.asJava)
         }
       }
     }
 
-    private def doGossipToUnreachableMember(message: Message): Unit = {
-      val liveEndPoints = liveEndpoints.size
-      val unreachableEndPoints = unreachableEndpoints.size
-      if (unreachableEndPoints > 0) {
-        /* based on some probability */ val prob = unreachableEndPoints / (liveEndPoints + 1)
-        val randDbl = random.nextDouble
-        if (randDbl < prob) sendGossip(message, unreachableEndpoints)
-      }
+    private def doGossipToLiveMember(message: Message): Boolean = {
+      val size = liveEndpoints.size
+      if (size == 0) return false
+      // return sendGossipToLiveNode(message);
+      /* Use this for a cluster size >= 30 */ sendGossip(message, liveEndpoints)
     }
 
     //@return true if the chosen endpoint is also a seed.
@@ -416,23 +260,36 @@ class Gossiper(private[kvstore] val generationNbr: Int,
       val index = if (size == 1) 0
       else random.nextInt(size)
       val to = liveEndPoints.get(index)
-      trace("Sending a GossipDigestSynMessage to " + to + " ..." + "from " + message.header.from)
+
+      info(s"Sending gossip message from ${localEndPoint} to ${to}")
+
       messagingService.sendTcpOneWay(message, to)
-      seeds.contains(to)
+      seed == to
     }
 
-    private def doGossipToLiveMember(message: Message): Boolean = {
-      val size = liveEndpoints.size
-      if (size == 0) return false
-      // return sendGossipToLiveNode(message);
-      /* Use this for a cluster size >= 30 */ sendGossip(message, liveEndpoints)
+
+    def localDigest() = {
+      var epState = endpointStateMap.get(localEndPoint)
+      messages.GossipDigest(localEndPoint, 1, 1)
     }
 
-    private def updateLocalHeartbeatCounter = {
-      /* Update the local heartbeat counter. */
-      val state: EndPointState = endpointStatemap.get(localEndPoint)
-      val newState = state.copy(state.heartBeatState.updateVersion(versionGenerator.incrementAndGetVersion), updateTimeStamp = System.currentTimeMillis())
-      endpointStatemap.put(localEndPoint, newState)
+    def makeRandomGossipDigest() = {
+      //FIXME Figure out why duplicates getting added here
+      val digests = new util.HashSet[GossipDigest]()
+      /* Add the local endpoint state */
+
+      digests.add(localDigest())
+
+      val endpoints = new util.ArrayList[InetAddressAndPort](liveEndpoints)
+      Collections.shuffle(endpoints, random)
+
+      for (liveEndPoint <- endpoints.asScala) {
+        val epState = endpointStateMap.get(liveEndPoint)
+        if (epState != null) {
+          digests.add(messages.GossipDigest(liveEndPoint, 1, epState.getMaxEndPointStateVersion()))
+        }
+      }
+      digests.asScala.toList.asJava
     }
   }
 }

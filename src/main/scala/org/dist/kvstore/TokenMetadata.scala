@@ -2,23 +2,17 @@ package org.dist.kvstore
 
 import java.math.BigInteger
 import java.util
-import java.util.concurrent.locks.{ReadWriteLock, ReentrantReadWriteLock}
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 class TokenMetadata {
+  def getToken(ep: InetAddressAndPort) = {
+    InetAddressAndPortToTokenMap.get(ep)
+  }
+
   /* Use this lock for manipulating the token map */
   private val lock = new ReentrantReadWriteLock(true)
   private var tokenToInetAddressAndPortMap = new util.HashMap[BigInteger, InetAddressAndPort]()
   private var InetAddressAndPortToTokenMap = new util.HashMap[InetAddressAndPort, BigInteger]
-
-  def getToken(ep: InetAddressAndPort) = {
-    lock.readLock.lock()
-    try {
-
-      InetAddressAndPortToTokenMap.get(ep)
-    } finally {
-      lock.readLock.unlock()
-    }
-  }
 
   def update(token: BigInteger, endpoint: InetAddressAndPort) = {
     lock.writeLock.lock()

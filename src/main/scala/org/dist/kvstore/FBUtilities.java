@@ -1,5 +1,6 @@
 package org.dist.kvstore;
 
+import org.dist.kvstore.InetAddressAndPort;
 import org.dist.util.Networks;
 
 import java.math.BigInteger;
