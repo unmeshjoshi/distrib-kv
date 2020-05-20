@@ -4,7 +4,7 @@ import java.io.File
 import java.net.ServerSocket
 import java.util.Random
 
-import org.dist.util.Networks
+import org.dist.kvstore.network.Networks
 import org.scalatest.Assertions.fail
 
 object TestUtils {

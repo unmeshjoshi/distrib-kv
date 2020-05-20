@@ -1,11 +1,11 @@
 package org.dist.kvstore
 
 import java.util
-import java.util.concurrent.ConcurrentHashMap
 
-import org.dist.kvstore
-import org.dist.kvstore.builders.{GossipDigestBuilder, GossipSynMessageBuilder}
-import org.dist.kvstore.messages.GossipDigest
+import org.dist.kvstore.gossip.builders.{GossipDigestBuilder, GossipSynMessageBuilder}
+import org.dist.kvstore.gossip.messages.GossipDigest
+import org.dist.kvstore.gossip._
+import org.dist.kvstore.network.{InetAddressAndPort, Verb}
 import org.dist.util.Utils
 import org.scalatest.FunSuite
 
@@ -74,7 +74,7 @@ class GossiperTest extends FunSuite {
 
 
     //For node1, heartbeat is at version 3 and tokens at version 1.
-    val ep = kvstore.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
+    val ep = EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
     val node1 = InetAddressAndPort.create("127.0.0.1", 8001)
     gossiper.endpointStateMap.put(node1, ep)
 
@@ -115,13 +115,13 @@ class GossiperTest extends FunSuite {
 
     val deltaGossipDigest = new util.ArrayList[GossipDigest]()
     val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
-    val digest1 = messages.GossipDigest(InetAddressAndPort.create("10.10.10.10", 8000), 1, 1)
-    val digest2 = messages.GossipDigest(InetAddressAndPort.create("10.10.10.10", 8001), 1, 1)
+    val digest1 = GossipDigest(InetAddressAndPort.create("10.10.10.10", 8000), 1, 1)
+    val digest2 = GossipDigest(InetAddressAndPort.create("10.10.10.10", 8001), 1, 1)
     gossiper.examineGossiper(util.Arrays.asList(digest1, digest2), deltaGossipDigest, deltaEndPointStates)
 
     assert(deltaGossipDigest.size() == 2)
-    assert(deltaGossipDigest.get(0) == messages.GossipDigest(InetAddressAndPort.create("10.10.10.10", 8000), 1, 0))
-    assert(deltaGossipDigest.get(1) == messages.GossipDigest(InetAddressAndPort.create("10.10.10.10", 8001), 1, 0))
+    assert(deltaGossipDigest.get(0) == GossipDigest(InetAddressAndPort.create("10.10.10.10", 8000), 1, 0))
+    assert(deltaGossipDigest.get(1) == GossipDigest(InetAddressAndPort.create("10.10.10.10", 8001), 1, 0))
   }
 
   test("should request all for the versions which are missing locally") {
@@ -131,20 +131,20 @@ class GossiperTest extends FunSuite {
     val server1Ep = InetAddressAndPort.create("10.10.10.10", 8000)
     val server2Ep = InetAddressAndPort.create("10.10.10.10", 8001)
 
-    val ep1 = kvstore.EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
+    val ep1 = gossip.EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
     gossiper.endpointStateMap.put(server1Ep, ep1)
-    val ep2 = kvstore.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
+    val ep2 = gossip.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
     gossiper.endpointStateMap.put(server2Ep, ep2)
 
     val deltaGossipDigest = new util.ArrayList[GossipDigest]()
     val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
-    val digest1 = messages.GossipDigest(server1Ep, 1, 4)
-    val digest2 = messages.GossipDigest(server2Ep, 1, 5)
+    val digest1 = GossipDigest(server1Ep, 1, 4)
+    val digest2 = GossipDigest(server2Ep, 1, 5)
     gossiper.examineGossiper(util.Arrays.asList(digest1, digest2), deltaGossipDigest, deltaEndPointStates)
 
     assert(deltaGossipDigest.size() == 2)
-    assert(deltaGossipDigest.get(0) == messages.GossipDigest(server1Ep, 1, 2))
-    assert(deltaGossipDigest.get(1) == messages.GossipDigest(server2Ep, 1, 3))
+    assert(deltaGossipDigest.get(0) == GossipDigest(server1Ep, 1, 2))
+    assert(deltaGossipDigest.get(1) == GossipDigest(server2Ep, 1, 3))
   }
 
 
@@ -155,14 +155,14 @@ class GossiperTest extends FunSuite {
     val server1Ep = InetAddressAndPort.create("10.10.10.10", 8000)
     val server2Ep = InetAddressAndPort.create("10.10.10.10", 8001)
 
-    val ep1 = kvstore.EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
+    val ep1 = gossip.EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
     gossiper.endpointStateMap.put(server1Ep, ep1)
-    val ep2 = kvstore.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
+    val ep2 = gossip.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
     gossiper.endpointStateMap.put(server2Ep, ep2)
 
     val deltaGossipDigest = new util.ArrayList[GossipDigest]()
     val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
-    val digest1 = messages.GossipDigest(server1Ep, 1, 4)
+    val digest1 = GossipDigest(server1Ep, 1, 4)
     gossiper.examineGossiper(util.Arrays.asList(digest1), deltaGossipDigest, deltaEndPointStates)
 
     assert(deltaEndPointStates.size() == 0)
@@ -175,15 +175,15 @@ class GossiperTest extends FunSuite {
     val server1Ep = InetAddressAndPort.create("10.10.10.10", 8000)
     val server2Ep = InetAddressAndPort.create("10.10.10.10", 8001)
 
-    val ep1 = kvstore.EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
+    val ep1 = gossip.EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
     gossiper.endpointStateMap.put(server1Ep, ep1)
-    val ep2 = kvstore.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
+    val ep2 = gossip.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
     gossiper.endpointStateMap.put(server2Ep, ep2)
 
     val deltaGossipDigest = new util.ArrayList[GossipDigest]()
     val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
-    val digest1 = messages.GossipDigest(server1Ep, 1, 4)
-    val digest2 = messages.GossipDigest(server2Ep, 1, 1)
+    val digest1 = GossipDigest(server1Ep, 1, 4)
+    val digest2 = GossipDigest(server2Ep, 1, 1)
     gossiper.examineGossiper(util.Arrays.asList(digest1,digest2), deltaGossipDigest, deltaEndPointStates)
 
     assert(deltaEndPointStates.size() == 1)
@@ -198,15 +198,15 @@ class GossiperTest extends FunSuite {
     val server1Ep = InetAddressAndPort.create("10.10.10.10", 8000)
     val server2Ep = InetAddressAndPort.create("10.10.10.10", 8001)
 
-    val ep1 = kvstore.EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
+    val ep1 = gossip.EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
     gossiper.endpointStateMap.put(server1Ep, ep1)
-    val ep2 = kvstore.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
+    val ep2 = gossip.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
     gossiper.endpointStateMap.put(server2Ep, ep2)
 
     val deltaGossipDigest = new util.ArrayList[GossipDigest]()
     val deltaEndPointStates = new util.HashMap[InetAddressAndPort, EndPointState]()
-    val digest1 = messages.GossipDigest(server1Ep, 1, 4)
-    val digest2 = messages.GossipDigest(server2Ep, 1, 3)
+    val digest1 = GossipDigest(server1Ep, 1, 4)
+    val digest2 = GossipDigest(server2Ep, 1, 3)
     gossiper.examineGossiper(util.Arrays.asList(digest1,digest2), deltaGossipDigest, deltaEndPointStates)
 
     assert(deltaEndPointStates.size() == 0)
@@ -219,13 +219,13 @@ class GossiperTest extends FunSuite {
     val server1Ep = InetAddressAndPort.create("10.10.10.10", 8000)
     val server2Ep = InetAddressAndPort.create("10.10.10.10", 8001)
 
-    val ep1 = kvstore.EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
+    val ep1 = gossip.EndPointState(HeartBeatState(1, 1), Map(ApplicationState.TOKENS → VersionedValue("1001", 2)).asJava)
     gossiper.endpointStateMap.put(server1Ep, ep1)
-    val ep2 = kvstore.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
+    val ep2 = gossip.EndPointState(HeartBeatState(1, 3), Map(ApplicationState.TOKENS → VersionedValue("1001", 1)).asJava)
     gossiper.endpointStateMap.put(server2Ep, ep2)
 
     val responseMap = new util.HashMap[InetAddressAndPort, EndPointState]
-    val epInResponse = kvstore.EndPointState(HeartBeatState(1, 4), Map(ApplicationState.TOKENS → VersionedValue("1002", 2)).asJava)
+    val epInResponse = gossip.EndPointState(HeartBeatState(1, 4), Map(ApplicationState.TOKENS → VersionedValue("1002", 2)).asJava)
     responseMap.put(server2Ep, epInResponse)
     gossiper.applyStateLocally(responseMap.asScala.toMap)
 

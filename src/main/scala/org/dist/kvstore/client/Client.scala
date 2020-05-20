@@ -1,7 +1,8 @@
 package org.dist.kvstore.client
 
-import org.dist.kvstore.{Header, InetAddressAndPort, JsonSerDes, Message, QuorumResponse, RowMutation, Stage, Verb}
-import org.dist.util.Networks
+import org.dist.kvstore.gossip.messages.{QuorumResponse, RowMutation}
+import org.dist.kvstore.network.{Header, InetAddressAndPort, JsonSerDes, Message, Networks, Verb}
+import org.dist.kvstore.Stage
 
 class Client(bootstrapServer: InetAddressAndPort) {
   private val socketClient = new SocketClient

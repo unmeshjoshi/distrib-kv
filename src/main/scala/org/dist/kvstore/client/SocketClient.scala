@@ -2,8 +2,7 @@ package org.dist.kvstore.client
 
 import java.net.Socket
 
-import org.dist.kvstore.{InetAddressAndPort, Message}
-import org.dist.util.SocketIO
+import org.dist.kvstore.network.{InetAddressAndPort, Message, SocketIO}
 
 class SocketClient {
   def sendReceiveTcp(message: Message, to: InetAddressAndPort) = {

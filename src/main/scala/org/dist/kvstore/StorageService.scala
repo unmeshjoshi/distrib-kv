@@ -4,6 +4,10 @@ import java.math.BigInteger
 import java.util
 
 import org.apache.log4j.Logger
+import org.dist.kvstore.gossip.{Gossiper, TokenMetadata}
+import org.dist.kvstore.gossip.messages.RowMutation
+import org.dist.kvstore.network.{InetAddressAndPort, MessagingService}
+import org.dist.util.{FBUtilities, GuidGenerator}
 
 case class Table(name:String, kv:util.Map[String, String]) {
   def put(key:String, value:String) = kv.put(key, value)

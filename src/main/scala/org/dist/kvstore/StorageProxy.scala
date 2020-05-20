@@ -5,7 +5,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 
-import org.dist.util.{Networks, SocketIO}
+import org.dist.kvstore.gossip.messages.{QuorumResponse, RowMutation, RowMutationResponse}
+import org.dist.kvstore.network.{Header, InetAddressAndPort, JsonSerDes, Message, MessageResponseHandler, MessagingService, SocketIO, TcpListener, Verb}
 import org.slf4j.LoggerFactory
 
 import scala.jdk.CollectionConverters._

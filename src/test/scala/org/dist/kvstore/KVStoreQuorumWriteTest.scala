@@ -3,7 +3,9 @@ package org.dist.kvstore
 import java.util
 
 import org.dist.kvstore.client.Client
-import org.dist.util.Networks
+import org.dist.kvstore.gossip.{ApplicationState, EndPointState}
+import org.dist.kvstore.gossip.messages.RowMutationResponse
+import org.dist.kvstore.network.{InetAddressAndPort, Networks}
 import org.scalatest.FunSuite
 
 import scala.jdk.CollectionConverters._

@@ -1,5 +1,8 @@
 package org.dist.kvstore;
 
+import org.dist.kvstore.gossip.TokenMetadata;
+import org.dist.kvstore.network.InetAddressAndPort;
+
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;

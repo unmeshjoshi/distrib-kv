@@ -8,8 +8,6 @@ import java.nio.file.{Path, Paths}
 import java.util.concurrent.locks.Lock
 import java.util.zip.CRC32
 
-import org.dist.kvstore.{FBUtilities, GuidGenerator}
-
 import scala.collection.mutable.ListBuffer
 import scala.collection.{Map, Seq, mutable}
 
