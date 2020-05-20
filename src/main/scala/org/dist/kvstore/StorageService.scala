@@ -6,7 +6,7 @@ import java.util
 import org.apache.log4j.Logger
 import org.dist.kvstore.gossip.{Gossiper, TokenMetadata}
 import org.dist.kvstore.gossip.messages.RowMutation
-import org.dist.kvstore.network.{InetAddressAndPort, MessagingService}
+import org.dist.kvstore.network.{InetAddressAndPort, MessagingService, MessagingServiceImpl}
 import org.dist.util.{FBUtilities, GuidGenerator}
 
 case class Table(name:String, kv:util.Map[String, String]) {
@@ -22,7 +22,7 @@ class StorageService(seed:InetAddressAndPort, clientListenAddress:InetAddressAnd
   val token = newToken()
   val tokenMetadata = new TokenMetadata()
   val gossiper = new Gossiper(seed, localEndPoint, token, tokenMetadata)
-  val messagingService = new MessagingService(gossiper, this)
+  val messagingService = new MessagingServiceImpl(gossiper, this)
   val storageProxy = new StorageProxy(clientListenAddress, this, messagingService)
 
   def start() = {

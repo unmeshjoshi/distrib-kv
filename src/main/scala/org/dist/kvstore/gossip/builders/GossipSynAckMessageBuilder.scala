@@ -11,7 +11,7 @@ import scala.jdk.CollectionConverters._
 
 class GossipSynAckMessageBuilder(localEndPoint:InetAddressAndPort) {
 
-  def build(deltaGossipDigest: util.ArrayList[GossipDigest], deltaEndPointStates: util.Map[InetAddressAndPort, EndPointState]) = {
+  def build(deltaGossipDigest: util.List[GossipDigest], deltaEndPointStates: util.Map[InetAddressAndPort, EndPointState]) = {
     val map = deltaEndPointStates.asScala.toMap
     val gossipDigestAck = GossipDigestAck(deltaGossipDigest.asScala.toList, map)
     val header = Header(localEndPoint, Stage.GOSSIP, Verb.GOSSIP_DIGEST_ACK)

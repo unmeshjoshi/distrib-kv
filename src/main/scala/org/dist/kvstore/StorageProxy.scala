@@ -111,7 +111,7 @@ class TcpClientRequestListner(localEp: InetAddressAndPort, storageService:Storag
 
       } finally {
         lock.unlock()
-        responses.forEach( m => messagingService.callbackMap.remove(m.header.id))
+        responses.forEach( m => messagingService.removeHandlerFor(m.header.id))
       }
       resolver.resolve(responses.asScala.toList)
     }

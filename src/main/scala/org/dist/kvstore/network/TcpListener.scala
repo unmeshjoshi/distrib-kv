@@ -35,7 +35,7 @@ class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageServic
 
       } else if(message.header.verb == Verb.RESPONSE) {
 
-        val handler = messagingService.callbackMap.get(message.header.id)
+        val handler = messagingService.getHandler(message.header.id)
         if (handler != null) handler.response(message)
 
       } else if (message.header.verb == Verb.ROW_MUTATION) {

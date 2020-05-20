@@ -1,24 +1,32 @@
 package org.dist.kvstore.network
 
-import java.net.{InetSocketAddress, ServerSocket, Socket}
+import java.net.Socket
 import java.util
 
-import org.dist.kvstore.gossip.Gossiper
-import org.dist.kvstore.gossip.handlers.{GossipDigestAck2Handler, GossipDigestSynAckHandler, GossipDigestSynHandler, RowMutationHandler}
-import org.dist.kvstore.gossip.messages.GossipDigestSyn
 import org.dist.kvstore.StorageService
-import org.slf4j.LoggerFactory
+import org.dist.kvstore.gossip.Gossiper
 
 
-
-
-
-
-class MessagingService(val gossiper: Gossiper, storageService: StorageService) {
-
-  gossiper.setMessageService(this)
+trait MessagingService {
 
   val callbackMap = new util.HashMap[String, MessageResponseHandler]()
+
+  def getHandler(id: String): MessageResponseHandler = callbackMap.get(id)
+
+  def removeHandlerFor(id: String): Unit = callbackMap.remove(id)
+
+  def sendRR(message: Message, to: List[InetAddressAndPort], messageResponseHandler: MessageResponseHandler): Unit = {
+    callbackMap.put(message.header.id, messageResponseHandler)
+    to.foreach(address => sendTcpOneWay(message, address))
+  }
+
+  def sendTcpOneWay(message: Message, to: InetAddressAndPort)
+  def sendUdpOneWay(message: Message, to: InetAddressAndPort)
+}
+
+class MessagingServiceImpl(val gossiper: Gossiper, storageService: StorageService) extends MessagingService {
+
+  gossiper.setMessageService(this)
 
   def init(): Unit = {
   }
@@ -26,11 +34,6 @@ class MessagingService(val gossiper: Gossiper, storageService: StorageService) {
   def listen(localEp: InetAddressAndPort): Unit = {
     assert(gossiper != null)
     new TcpListener(localEp, gossiper, storageService, this).start()
-  }
-
-  def sendRR(message: Message, to: List[InetAddressAndPort], messageResponseHandler: MessageResponseHandler): Unit = {
-    callbackMap.put(message.header.id, messageResponseHandler)
-    to.foreach(address => sendTcpOneWay(message, address))
   }
 
   def sendTcpOneWay(message: Message, to: InetAddressAndPort) = {
@@ -41,5 +44,6 @@ class MessagingService(val gossiper: Gossiper, storageService: StorageService) {
   def sendUdpOneWay(message: Message, to: InetAddressAndPort) = {
     //for control messages like gossip use udp.
   }
+
 }
 

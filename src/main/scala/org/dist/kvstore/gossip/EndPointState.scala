@@ -6,8 +6,8 @@ import scala.jdk.CollectionConverters._
 
 case class EndPointState(var heartBeatState: HeartBeatState,
                          applicationStates:Map[ApplicationState, VersionedValue] = new util.EnumMap[ApplicationState, VersionedValue](classOf[ApplicationState]),
-                         isAlive:Boolean = true,
-                         updateTimeStamp:Long = System.nanoTime()) {
+                         isAlive:Boolean = true) {
+
 
   def addApplicationState(key: ApplicationState, value: VersionedValue): EndPointState = {
     addApplicationStates(Collections.singletonMap(key, value))
@@ -38,7 +38,9 @@ case class EndPointState(var heartBeatState: HeartBeatState,
     maxVersion
   }
 
-  def markSuspected(): EndPointState = {
+  def markUnreachable(): EndPointState = {
     this.copy(isAlive = false)
   }
+
+  def markAlive() = this.copy(isAlive = false)
 }

@@ -35,6 +35,8 @@ abstract class FailureDetector[T] extends Logging {
 
   def stop() = timeoutChecker.cancel()
 
+  def unreachableServers() = serverStates.asScala.filter(kv => kv._2 == ServerState.DOWN).toMap
+
   def heartBeatCheck()
   def heartBeatReceived(serverId:T)
 }

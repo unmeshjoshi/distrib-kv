@@ -42,13 +42,29 @@ class Gossiper(val seed: InetAddressAndPort,
   }
 
   def handleNewJoin(ep: InetAddressAndPort, endPointState: EndPointState) = {
-    this.liveEndpoints.add(ep)
+    markAlive(ep)
     this.endpointStateMap.put(ep, endPointState)
     val versionedValue: VersionedValue = endPointState.applicationStates.get(ApplicationState.TOKENS)
     tokenMetadata.update(new BigInteger(versionedValue.value), ep)
     info(s"${ep} joined ${localEndPoint} ")
   }
 
+
+  private def markAlive(ep: InetAddressAndPort) = {
+    this.liveEndpoints.add(ep)
+    this.unreachableEndpoints.remove(ep)
+    val state = endpointStateMap.get(ep)
+    if (state != null) {
+      endpointStateMap.put(ep, state.markAlive())
+    }
+  }
+
+  private def markDead(ep: InetAddressAndPort) = {
+    this.liveEndpoints.remove(ep)
+    this.unreachableEndpoints.add(ep)
+    val state = endpointStateMap.get(ep)
+    endpointStateMap.put(ep, state.markUnreachable())
+  }
 
   def notifyFailureDetector(remoteEpStateMap: util.Map[InetAddressAndPort, EndPointState]): Unit = {
     val endpoints = remoteEpStateMap.keySet
@@ -64,17 +80,16 @@ class Gossiper(val seed: InetAddressAndPort,
         val remoteGeneration = remoteEndPointState.heartBeatState.generation
         if (remoteGeneration > localGeneration) {
           info("Reporting " + endpoint + " to the FD.")
-          fd.report(endpoint)
+          fd.heartBeatReceived(endpoint)
           //          continue //todo: continue is not supported
 
         }
         if (remoteGeneration == localGeneration) {
           val localVersion = localEndPointState.getMaxEndPointStateVersion()
-          //int localVersion = localEndPointState.getHeartBeatState().getHeartBeatVersion();
           val remoteVersion = remoteEndPointState.heartBeatState.version
           if (remoteVersion > localVersion) {
             info("Reporting " + endpoint + " to the FD.")
-            fd.report(endpoint)
+            fd.heartBeatReceived(endpoint)
           }
         }
       }
@@ -111,7 +126,7 @@ class Gossiper(val seed: InetAddressAndPort,
       val oldVersion = localHbState.version
 
       debug("Updating heartbeat state version to " + localState.heartBeatState.version + " from " + oldVersion + " for " + addr + " ...")
-      return localState.copy(remoteHbState, updateTimeStamp = System.currentTimeMillis())
+      return localState.copy(remoteHbState)
     }
 
     localState
@@ -214,6 +229,8 @@ class Gossiper(val seed: InetAddressAndPort,
 
   class GossipTask extends Runnable {
 
+
+
     @Override
     def run() = {
       val randomDigest = new GossipDigestBuilder(localEndPoint, endpointStateMap, liveEndpoints).makeRandomGossipDigest()
@@ -226,7 +243,9 @@ class Gossiper(val seed: InetAddressAndPort,
       }
 
       //todo mark servers as live or dead.
-      fd.heartBeatCheck()
+      fd.heartBeatCheck() //interpret results
+      fd.unreachableServers.keys.foreach(ep => markDead(ep))
+
     }
 
     private def doGossipToSeed(message: Message): Unit = {
