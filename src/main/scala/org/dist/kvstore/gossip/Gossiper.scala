@@ -6,7 +6,7 @@ import java.util.concurrent.{ConcurrentHashMap, ScheduledThreadPoolExecutor, Tim
 import java.util.{Collections, Random}
 
 import org.dist.kvstore.gossip.builders.{GossipDigestBuilder, GossipSynMessageBuilder}
-import org.dist.kvstore.gossip.failuredetector.PhiChiAccrualFailureDetector
+import org.dist.kvstore.gossip.failuredetector.{FailureDetector, PhiChiAccrualFailureDetector}
 import org.dist.kvstore.gossip.messages.GossipDigest
 import org.dist.kvstore._
 import org.dist.kvstore.network.{InetAddressAndPort, Message, MessagingService}
@@ -19,10 +19,11 @@ class Gossiper(val seed: InetAddressAndPort,
                val localEndPoint: InetAddressAndPort,
                val token: BigInteger,
                val tokenMetadata: TokenMetadata,
+               val fd:FailureDetector[InetAddressAndPort] = new PhiChiAccrualFailureDetector[InetAddressAndPort](),
                val executor: ScheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(1)) extends Logging {
   private[kvstore] val seeds = if (seed == localEndPoint) List() else List(seed)
   val versionGenerator = new VersionGenerator()
-  val fd = new PhiChiAccrualFailureDetector[InetAddressAndPort]()
+
 
   def initializeLocalEndpointState() = {
     var localState = endpointStateMap.get(localEndPoint)
