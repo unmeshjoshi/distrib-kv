@@ -4,13 +4,16 @@ import java.math.BigInteger
 import java.util
 
 import org.apache.log4j.Logger
-import org.dist.kvstore.gossip.{Gossiper, TokenMetadata}
-import org.dist.kvstore.gossip.messages.RowMutation
+import org.dist.kvstore.gossip.{Gossiper, TokenMetadata, VersionedValue}
+import org.dist.kvstore.gossip.messages.{ReadMessage, RowMutation}
 import org.dist.kvstore.network.{InetAddressAndPort, MessagingService, MessagingServiceImpl}
 import org.dist.util.{FBUtilities, GuidGenerator}
 
-case class Table(name:String, kv:util.Map[String, String]) {
-  def put(key:String, value:String) = kv.put(key, value)
+case class Value(value:String, timestamp:Long = System.currentTimeMillis())
+case class Table(name:String, kv:util.Map[String, Value]) {
+  def get(key: String): Value = kv.get(key)
+
+  def put(key:String, value:Value) = kv.put(key, value)
 }
 
 class StorageService(seed:InetAddressAndPort, clientListenAddress:InetAddressAndPort, val localEndPoint:InetAddressAndPort) {
@@ -39,7 +42,7 @@ class StorageService(seed:InetAddressAndPort, clientListenAddress:InetAddressAnd
     token
   }
 
-  val ReplicationFactor = 3
+  val ReplicationFactor = 5
   def getNStorageEndPointMap(key: String) = {
     val token: BigInteger = FBUtilities.hash(key)
     new RackUnawareStrategy(tokenMetadata).getStorageEndPoints(token, tokenMetadata.cloneTokenEndPointMap)
@@ -48,11 +51,15 @@ class StorageService(seed:InetAddressAndPort, clientListenAddress:InetAddressAnd
   def apply(rowMutation: RowMutation) = {
     var table = tables.get(rowMutation.table)
     if (table == null) {
-      table = new Table(rowMutation.table, new util.HashMap[String, String]())
+      table = new Table(rowMutation.table, new util.HashMap[String, Value]())
       tables.put(rowMutation.table, table)
     }
     table.put(rowMutation.key, rowMutation.value)
     true
   }
 
+  def read(readMessage:ReadMessage): Value = {
+    val table = tables.get(readMessage.table)
+    table.get(readMessage.key)
+  }
 }

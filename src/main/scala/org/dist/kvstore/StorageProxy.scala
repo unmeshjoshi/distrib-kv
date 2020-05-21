@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.locks.ReentrantLock
 
-import org.dist.kvstore.gossip.messages.{QuorumResponse, RowMutation, RowMutationResponse}
+import org.dist.kvstore.gossip.messages.{QuorumResponse, ReadMessageResponse, RowMutation, RowMutationResponse}
 import org.dist.kvstore.network.{Header, InetAddressAndPort, JsonSerDes, Message, MessageResponseHandler, MessagingService, SocketIO, TcpListener, Verb}
 import org.slf4j.LoggerFactory
 
@@ -35,12 +35,12 @@ class TcpClientRequestListner(localEp: InetAddressAndPort, storageService:Storag
         logger.debug(s"Got client message ${message}")
 
         if(message.header.verb == Verb.ROW_MUTATION) {
-          val response: Seq[Message] = new RowMutationHandler(storageService).handleMessage(message)
-          val value: Seq[RowMutationResponse] = response.map(message => JsonSerDes.deserialize(message.payloadJson.getBytes, classOf[RowMutationResponse]))
-          new Message(message.header, JsonSerDes.serialize(QuorumResponse(value.toList)))
+          val response = new RowMutationHandler(storageService).handleMessage(message)
+          new Message(message.header, JsonSerDes.serialize(QuorumResponse(response)))
 
         } else if(message.header.verb == Verb.GET_CF) {
-          ""
+          val response = new ReadMessageHandler(storageService).handleMessage(message)
+          new Message(message.header, JsonSerDes.serialize(QuorumResponse(response)))
 
         } else {
           ""
@@ -56,7 +56,20 @@ class TcpClientRequestListner(localEp: InetAddressAndPort, storageService:Storag
       val quorumResponseHandler = new QuorumResponseHandler(serversHostingKey.size, new WriteResponseResolver())
       val header = Header(storageService.localEndPoint, Stage.MUTATION, Verb.ROW_MUTATION)
       val message = Message(header, rowMutationMessage.payloadJson)
-      messagingService.sendRR(message, serversHostingKey.toList, quorumResponseHandler)
+      messagingService.sendWithCallback(message, serversHostingKey.toList, quorumResponseHandler)
+      quorumResponseHandler.get()
+    }
+  }
+
+  class ReadMessageHandler(storageService: StorageService) {
+    def handleMessage(readMessage: Message) = {
+      val rowMutation = JsonSerDes.deserialize(readMessage.payloadJson.getBytes, classOf[RowMutation])
+      val serversHostingKey = storageService.getNStorageEndPointMap(rowMutation.key)
+      val quorumResponseHandler = new QuorumResponseHandler(serversHostingKey.size, new WriteResponseResolver())
+      val header = Header(storageService.localEndPoint, Stage.READ, Verb.GET_CF)
+      val message = Message(header, readMessage.payloadJson)
+
+      messagingService.sendWithCallback(message, serversHostingKey.toList, quorumResponseHandler)
       quorumResponseHandler.get()
     }
   }

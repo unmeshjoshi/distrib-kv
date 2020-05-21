@@ -4,8 +4,8 @@ import java.util
 
 import org.dist.kvstore.client.Client
 import org.dist.kvstore.gossip.{ApplicationState, EndPointState}
-import org.dist.kvstore.gossip.messages.RowMutationResponse
-import org.dist.kvstore.network.{InetAddressAndPort, Networks}
+import org.dist.kvstore.gossip.messages.{ReadMessageResponse, RowMutationResponse}
+import org.dist.kvstore.network.{InetAddressAndPort, JsonSerDes, Networks}
 import org.scalatest.FunSuite
 
 import scala.jdk.CollectionConverters._
@@ -40,8 +40,13 @@ class KVStoreQuorumWriteTest extends FunSuite {
     })
 
     val client = new Client(clientListenAddress)
-    val mutationResponses: Seq[RowMutationResponse] = client.put("table1", "key1", "value1")
-    assert(mutationResponses.size == 2)
-    assert(mutationResponses.map(m => m.success).toSet == Set(true))
+    val writeQuorum = client.put("table1", "key1", "value1")
+    assert(writeQuorum.size == 3)
+    assert(writeQuorum.map(m => JsonSerDes.deserialize(m.payloadJson, classOf[RowMutationResponse]).success).toSet == Set(true))
+
+    val readQuorum = client.get("table1", "key1")
+    assert(3 == readQuorum.size)
+    assert(readQuorum.map(m => JsonSerDes.deserialize(m.payloadJson, classOf[ReadMessageResponse]).value.value) == List("value1", "value1", "value1"))
+
   }
 }

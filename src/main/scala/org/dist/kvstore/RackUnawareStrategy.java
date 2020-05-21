@@ -21,7 +21,7 @@ public class RackUnawareStrategy
 {   
     /* Use this flag to check if initialization is in order. */
     private AtomicBoolean initialized_ = new AtomicBoolean(false);
-    private int replicationFactor = 2;
+    private int replicationFactor = 5;
     private TokenMetadata tokenMetadata;
 
     public RackUnawareStrategy(TokenMetadata tokenMetadata)

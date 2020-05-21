@@ -5,17 +5,21 @@ import java.util
 
 import org.dist.kvstore.StorageService
 import org.dist.kvstore.gossip.Gossiper
+import org.dist.util.Logging
 
 
-trait MessagingService {
+trait MessagingService extends Logging {
 
-  val callbackMap = new util.HashMap[String, MessageResponseHandler]()
+  val callbackMap = new util.concurrent.ConcurrentHashMap[String, MessageResponseHandler]()
 
   def getHandler(id: String): MessageResponseHandler = callbackMap.get(id)
 
-  def removeHandlerFor(id: String): Unit = callbackMap.remove(id)
+  def removeHandlerFor(id: String): Unit = {
+    trace(s"Removing handler for ${id}")
+    callbackMap.remove(id)
+  }
 
-  def sendRR(message: Message, to: List[InetAddressAndPort], messageResponseHandler: MessageResponseHandler): Unit = {
+  def sendWithCallback(message: Message, to: List[InetAddressAndPort], messageResponseHandler: MessageResponseHandler): Unit = {
     callbackMap.put(message.header.id, messageResponseHandler)
     to.foreach(address => sendTcpOneWay(message, address))
   }

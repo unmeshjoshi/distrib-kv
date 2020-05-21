@@ -3,7 +3,7 @@ package org.dist.kvstore.network
 import java.net.{InetSocketAddress, ServerSocket}
 
 import org.dist.kvstore.gossip.Gossiper
-import org.dist.kvstore.gossip.handlers.{GossipDigestAck2Handler, GossipDigestSynAckHandler, GossipDigestSynHandler, RowMutationHandler}
+import org.dist.kvstore.gossip.handlers.{GossipDigestAck2Handler, GossipDigestSynAckHandler, GossipDigestSynHandler, ReadMessageHandler, RowMutationHandler}
 import org.dist.kvstore.gossip.messages.GossipDigestSyn
 import org.dist.kvstore.StorageService
 import org.slf4j.LoggerFactory
@@ -40,6 +40,9 @@ class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageServic
 
       } else if (message.header.verb == Verb.ROW_MUTATION) {
         new RowMutationHandler(localEp, storageService, messagingService).handleMessage(message)
+
+      } else if (message.header.verb == Verb.GET_CF) {
+        new ReadMessageHandler(localEp, storageService, messagingService).handleMessage(message)
       }
     }
   }
