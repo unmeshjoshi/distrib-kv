@@ -2,7 +2,7 @@ package org.dist.kvstore.gossip
 
 import java.math.BigInteger
 import java.util
-import java.util.concurrent.{ConcurrentHashMap, ScheduledThreadPoolExecutor, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ScheduledFuture, ScheduledThreadPoolExecutor, TimeUnit}
 import java.util.{Collections, Random}
 
 import org.dist.kvstore.gossip.builders.{GossipDigestBuilder, GossipSynMessageBuilder}
@@ -21,6 +21,13 @@ class Gossiper(val seed: InetAddressAndPort,
                val tokenMetadata: TokenMetadata,
                val fd:FailureDetector[InetAddressAndPort] = new PhiChiAccrualFailureDetector[InetAddressAndPort](),
                val executor: ScheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(1)) extends Logging {
+  def stop() = {
+    if (taskFuture != null) {
+      taskFuture.cancel(true)
+    }
+    executor.shutdownNow()
+  }
+
   private[kvstore] val seeds = if (seed == localEndPoint) List() else List(seed)
   val versionGenerator = new VersionGenerator()
 
@@ -212,9 +219,9 @@ class Gossiper(val seed: InetAddressAndPort,
   val endpointStateMap = new ConcurrentHashMap[InetAddressAndPort, EndPointState]
 
   initializeLocalEndpointState()
-
+  var taskFuture: ScheduledFuture[_] = _
   def start() = {
-    executor.scheduleAtFixedRate(new GossipTask, intervalMillis, intervalMillis, TimeUnit.MILLISECONDS)
+    taskFuture = executor.scheduleAtFixedRate(new GossipTask, intervalMillis, intervalMillis, TimeUnit.MILLISECONDS)
   }
 
   var messagingService: MessagingService = _
@@ -237,6 +244,8 @@ class Gossiper(val seed: InetAddressAndPort,
       val randomDigest = new GossipDigestBuilder(localEndPoint, endpointStateMap, liveEndpoints).makeRandomGossipDigest()
 
       val gossipDigestSynMessage = new GossipSynMessageBuilder("cluster", localEndPoint).build(randomDigest)
+
+      updateHeartbeat
 
       val sentToSeedNode = doGossipToLiveMember(gossipDigestSynMessage)
       if (!sentToSeedNode) {
@@ -284,5 +293,12 @@ class Gossiper(val seed: InetAddressAndPort,
       messagingService.sendTcpOneWay(message, to)
       seed == to
     }
+  }
+
+  private def updateHeartbeat = {
+    val state = endpointStateMap.get(localEndPoint)
+    val updatedHeartBeatState = state.heartBeatState.updateVersion(versionGenerator.incrementAndGetVersion)
+    val newState = state.updateHeartbeat(updatedHeartBeatState)
+    endpointStateMap.put(localEndPoint, newState)
   }
 }

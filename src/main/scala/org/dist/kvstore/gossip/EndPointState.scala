@@ -4,10 +4,14 @@ import java.util
 import java.util.{Collections, Map}
 import scala.jdk.CollectionConverters._
 
-case class EndPointState(var heartBeatState: HeartBeatState,
+case class EndPointState(val heartBeatState: HeartBeatState,
                          applicationStates:Map[ApplicationState, VersionedValue] = new util.EnumMap[ApplicationState, VersionedValue](classOf[ApplicationState]),
                          isAlive:Boolean = true) {
 
+
+  def updateHeartbeat(heartBeatState: HeartBeatState) = {
+    EndPointState(heartBeatState, this.applicationStates, isAlive)
+  }
 
   def addApplicationState(key: ApplicationState, value: VersionedValue): EndPointState = {
     addApplicationStates(Collections.singletonMap(key, value))

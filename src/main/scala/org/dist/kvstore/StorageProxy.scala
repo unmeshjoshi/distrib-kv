@@ -7,6 +7,7 @@ import java.util.concurrent.locks.ReentrantLock
 
 import org.dist.kvstore.gossip.messages.{QuorumResponse, ReadMessageResponse, RowMutation, RowMutationResponse}
 import org.dist.kvstore.network.{Header, InetAddressAndPort, JsonSerDes, Message, MessageResponseHandler, MessagingService, SocketIO, TcpListener, Verb}
+import org.dist.util.Utils
 import org.slf4j.LoggerFactory
 
 import scala.jdk.CollectionConverters._
@@ -14,8 +15,16 @@ import scala.jdk.CollectionConverters._
 
 class StorageProxy(clientRequestIp: InetAddressAndPort, storageService: StorageService, messagingService:MessagingService) {
 
+
+
+  private val listner = new TcpClientRequestListner(clientRequestIp, storageService, messagingService)
+
   def start(): Unit = {
-      new TcpClientRequestListner(clientRequestIp, storageService, messagingService).start()
+      listner.start()
+  }
+
+  def stop() = {
+    listner.shutdown()
   }
 }
 
@@ -23,8 +32,13 @@ class StorageProxy(clientRequestIp: InetAddressAndPort, storageService: StorageS
 class TcpClientRequestListner(localEp: InetAddressAndPort, storageService:StorageService, messagingService:MessagingService) extends Thread {
   private val logger = LoggerFactory.getLogger(classOf[TcpListener])
 
+  val serverSocket = new ServerSocket()
+  @volatile var isRunning = false
+
+
   override def run(): Unit = {
-    val serverSocket = new ServerSocket()
+    isRunning = true
+
     serverSocket.bind(new InetSocketAddress(localEp.address, localEp.port))
     println(s"Listening for client connections on ${localEp}")
     while (true) {
@@ -47,6 +61,11 @@ class TcpClientRequestListner(localEp: InetAddressAndPort, storageService:Storag
         }
       }
     }
+  }
+
+  def shutdown(): Unit = {
+    Utils.swallow(serverSocket.close())
+    isRunning = false
   }
 
   class RowMutationHandler(storageService: StorageService) {

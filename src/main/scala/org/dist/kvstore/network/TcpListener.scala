@@ -6,18 +6,22 @@ import org.dist.kvstore.gossip.Gossiper
 import org.dist.kvstore.gossip.handlers.{GossipDigestAck2Handler, GossipDigestSynAckHandler, GossipDigestSynHandler, ReadMessageHandler, RowMutationHandler}
 import org.dist.kvstore.gossip.messages.GossipDigestSyn
 import org.dist.kvstore.StorageService
+import org.dist.util.Utils
 import org.slf4j.LoggerFactory
 
 class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageService: StorageService, messagingService: MessagingService) extends Thread {
   private val logger = LoggerFactory.getLogger(classOf[TcpListener])
 
+  val serverSocket = new ServerSocket()
+  @volatile var isRunning = false
+
   override def run(): Unit = {
-    val serverSocket = new ServerSocket()
+    isRunning = true
     serverSocket.bind(new InetSocketAddress(localEp.address, localEp.port))
 
     logger.info(s"Listening on ${localEp}")
 
-    while (true) {
+    while (isRunning) {
       val socket = serverSocket.accept()
       val message = new SocketIO[Message](socket, classOf[Message]).read()
       logger.debug(s"Got message ${message}")
@@ -46,4 +50,10 @@ class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageServic
       }
     }
   }
+
+  def shutdown(): Unit = {
+    Utils.swallow(serverSocket.close())
+    isRunning = false
+  }
+
 }

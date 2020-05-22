@@ -35,9 +35,16 @@ class MessagingServiceImpl(val gossiper: Gossiper, storageService: StorageServic
   def init(): Unit = {
   }
 
+  var listener:TcpListener = _
+
   def listen(localEp: InetAddressAndPort): Unit = {
     assert(gossiper != null)
-    new TcpListener(localEp, gossiper, storageService, this).start()
+    listener = new TcpListener(localEp, gossiper, storageService, this)
+    listener.start()
+  }
+
+  def stop() = {
+    listener.shutdown()
   }
 
   def sendTcpOneWay(message: Message, to: InetAddressAndPort) = {

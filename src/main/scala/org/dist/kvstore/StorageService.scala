@@ -62,4 +62,10 @@ class StorageService(seed:InetAddressAndPort, clientListenAddress:InetAddressAnd
     val table = tables.get(readMessage.table)
     table.get(readMessage.key)
   }
+
+  def stop() = {
+    messagingService.stop()
+    gossiper.stop()
+    storageProxy.stop()
+  }
 }
