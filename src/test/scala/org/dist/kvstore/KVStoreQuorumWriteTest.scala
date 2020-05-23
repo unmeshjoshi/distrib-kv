@@ -20,7 +20,7 @@ class KVStoreQuorumWriteTest extends FunSuite {
 
     val storages = new java.util.ArrayList[StorageService]()
     val basePort = 8081
-    val serverCount = 10
+    val serverCount = 5
     for (i ← 1 to serverCount) {
       val clientAddress = InetAddressAndPort(localIp, TestUtils.choosePort())
       val storage = new StorageService(seedIp, clientAddress, InetAddressAndPort(localIp, basePort + i))
@@ -39,14 +39,22 @@ class KVStoreQuorumWriteTest extends FunSuite {
       assert(tokens.toList.contains(s.gossiper.token.toString()))
     })
 
+    val serviceToBeStopped = storages.get(2)
+    serviceToBeStopped.stop()
+
+    TestUtils.waitUntilTrue(() ⇒ {
+      //serverCount + 1 seedIp
+      storages.get(0).gossiper.unreachableEndpoints.contains(serviceToBeStopped.localEndPoint)
+    }, "Waiting for server2 to be marked unreachable", 15000)
+
     val client = new Client(clientListenAddress)
     val writeQuorum = client.put("table1", "key1", "value1")
-    assert(writeQuorum.size == 3)
+    assert(writeQuorum.size == 2)
     assert(writeQuorum.map(m => JsonSerDes.deserialize(m.payloadJson, classOf[RowMutationResponse]).success).toSet == Set(true))
 
     val readQuorum = client.get("table1", "key1")
-    assert(3 == readQuorum.size)
-    assert(readQuorum.map(m => JsonSerDes.deserialize(m.payloadJson, classOf[ReadMessageResponse]).value.value) == List("value1", "value1", "value1"))
+    assert(2 == readQuorum.size)
+    assert(readQuorum.map(m => JsonSerDes.deserialize(m.payloadJson, classOf[ReadMessageResponse]).value.value) == List("value1", "value1"))
 
   }
 }

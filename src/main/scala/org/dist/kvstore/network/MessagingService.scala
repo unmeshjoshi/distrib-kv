@@ -48,8 +48,12 @@ class MessagingServiceImpl(val gossiper: Gossiper, storageService: StorageServic
   }
 
   def sendTcpOneWay(message: Message, to: InetAddressAndPort) = {
+    try {
     val clientSocket = new Socket(to.address, to.port)
     new SocketIO[Message](clientSocket, classOf[Message]).write(message)
+    } catch {
+      case e:Exception => logger.error(e)
+    }
   }
 
   def sendUdpOneWay(message: Message, to: InetAddressAndPort) = {

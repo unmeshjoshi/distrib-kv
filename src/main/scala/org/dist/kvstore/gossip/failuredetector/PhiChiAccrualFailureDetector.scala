@@ -47,7 +47,7 @@ class PhiChiAccrualFailureDetector[T] extends FailureDetector[T] {
 
   def getPhiConvictThreshold = {
      // return DatabaseDescriptor.getPhiConvictThreshold//
-    8.0
+    2.0
   }
 
   def interpret(ep: T): Unit = {
@@ -57,7 +57,7 @@ class PhiChiAccrualFailureDetector[T] extends FailureDetector[T] {
     val diff = now - lastInterpret
     lastInterpret = now
     if (diff > MAX_LOCAL_PAUSE_IN_NANOS) {
-      logger.warn("Not marking nodes down due to local pause of {}ns > {}ns", diff, MAX_LOCAL_PAUSE_IN_NANOS)
+      logger.warn(s"Not marking nodes down due to local pause of ${diff}ns > ${MAX_LOCAL_PAUSE_IN_NANOS}ns")
       lastPause = now
       return
     }

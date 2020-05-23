@@ -42,7 +42,6 @@ class StorageService(seed:InetAddressAndPort, clientListenAddress:InetAddressAnd
     token
   }
 
-  val ReplicationFactor = 5
   def getNStorageEndPointMap(key: String) = {
     val token: BigInteger = FBUtilities.hash(key)
     new RackUnawareStrategy(tokenMetadata).getStorageEndPoints(token, tokenMetadata.cloneTokenEndPointMap)
