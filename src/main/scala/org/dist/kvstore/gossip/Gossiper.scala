@@ -21,16 +21,9 @@ class Gossiper(val seed: InetAddressAndPort,
                val tokenMetadata: TokenMetadata,
                val fd:FailureDetector[InetAddressAndPort] = new PhiChiAccrualFailureDetector[InetAddressAndPort](),
                val executor: ScheduledThreadPoolExecutor = new ScheduledThreadPoolExecutor(1)) extends Logging {
-  def stop() = {
-    if (taskFuture != null) {
-      taskFuture.cancel(true)
-    }
-    executor.shutdownNow()
-  }
 
   private[kvstore] val seeds = if (seed == localEndPoint) List() else List(seed)
   val versionGenerator = new VersionGenerator()
-
 
   def initializeLocalEndpointState() = {
     var localState = endpointStateMap.get(localEndPoint)
@@ -301,4 +294,12 @@ class Gossiper(val seed: InetAddressAndPort,
     val newState = state.updateHeartbeat(updatedHeartBeatState)
     endpointStateMap.put(localEndPoint, newState)
   }
+
+  def stop() = {
+    if (taskFuture != null) {
+      taskFuture.cancel(true)
+    }
+    executor.shutdownNow()
+  }
+
 }
