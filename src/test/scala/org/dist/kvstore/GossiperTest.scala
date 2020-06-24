@@ -148,7 +148,7 @@ class GossiperTest extends FunSuite {
   }
 
 
-  test("should not send endPointStates which are missing in the remote digests") {
+  test("should not send endPointStates which are not asked for in the remote digests") {
     val seed = InetAddressAndPort.create("127.0.0.1", 8000)
     val localEndpoint = InetAddressAndPort.create("127.0.0.1", 8000)
     val gossiper = new Gossiper(seed, localEndpoint, Utils.newToken(), new TokenMetadata())
