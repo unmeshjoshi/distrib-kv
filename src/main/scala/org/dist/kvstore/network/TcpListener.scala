@@ -23,7 +23,7 @@ class TcpListener(localEp: InetAddressAndPort, gossiper: Gossiper, storageServic
 
     while (isRunning) {
       val socket = serverSocket.accept()
-      val message = new SocketIO[Message](socket, classOf[Message]).read()
+      val message = new SocketIO[Message](socket, classOf[Message], 5000).read()
       logger.debug(s"Got message ${message}")
 
       if (message.header.verb == Verb.GOSSIP_DIGEST_SYN) {

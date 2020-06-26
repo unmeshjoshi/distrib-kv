@@ -5,8 +5,8 @@ import java.net.Socket
 
 import scala.util.Using
 
-class SocketIO[T](clientSocket: Socket, responseClass: Class[T]) {
-  clientSocket.setSoTimeout(5000)
+class SocketIO[T](clientSocket: Socket, responseClass: Class[T], timeout: Int) {
+  clientSocket.setSoTimeout(timeout)
 
   def readHandleWithSocket(handler:(T, Socket) => Any): Unit = {
     val responseBytes = read(clientSocket)

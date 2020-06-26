@@ -50,7 +50,7 @@ class MessagingServiceImpl(val gossiper: Gossiper, storageService: StorageServic
   def sendTcpOneWay(message: Message, to: InetAddressAndPort) = {
     try {
     val clientSocket = new Socket(to.address, to.port)
-    new SocketIO[Message](clientSocket, classOf[Message]).write(message)
+    new SocketIO[Message](clientSocket, classOf[Message], 5000).write(message)
     } catch {
       case e:Exception => logger.error(e)
     }

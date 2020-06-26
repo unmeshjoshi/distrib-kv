@@ -43,7 +43,7 @@ class TcpClientRequestListner(localEp: InetAddressAndPort, storageService:Storag
     println(s"Listening for client connections on ${localEp}")
     while (true) {
       val socket = serverSocket.accept()
-      val socketIO = new SocketIO[Message](socket, classOf[Message])
+      val socketIO = new SocketIO[Message](socket, classOf[Message], 5000)
       val message = socketIO.readHandleRespond { message =>
 
         logger.debug(s"Got client message ${message}")

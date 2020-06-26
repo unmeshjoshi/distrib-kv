@@ -9,6 +9,8 @@ class PushNodeState {
     int incarnation;
     NodeState state;
 
+    private PushNodeState() {}
+
     public PushNodeState(String name, InetAddressAndPort addr, byte[] meta, int incarnation, NodeState state) {
         this.name = name;
         this.addr = addr;

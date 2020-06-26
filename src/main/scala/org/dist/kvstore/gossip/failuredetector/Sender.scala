@@ -75,7 +75,7 @@ class Sender(id:Int, peers:List[Peer]) extends Logging {
 class Client {
   def sendReceive(requestOrResponse: RequestOrResponse, to:InetAddressAndPort):RequestOrResponse = {
     val clientSocket = new Socket(to.address, to.port)
-    new SocketIO[RequestOrResponse](clientSocket, classOf[RequestOrResponse]).requestResponse(requestOrResponse)
+    new SocketIO[RequestOrResponse](clientSocket, classOf[RequestOrResponse], 5000).requestResponse(requestOrResponse)
   }
 }
 

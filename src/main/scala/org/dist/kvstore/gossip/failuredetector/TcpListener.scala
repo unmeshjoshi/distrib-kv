@@ -22,9 +22,14 @@ class SingularUpdateQueue(handler:RequestOrResponse => RequestOrResponse) extend
 
   override def run(): Unit = {
     while (running) {
-      val (request, socketIo) = workQueue.take()
-      val response = handler(request)
-      socketIo.write(response)
+      try {
+        val (request, socketIo) = workQueue.take()
+        val response = handler(request)
+        if (!response.messageBodyJson.equals(""))
+          socketIo.write(response)
+      } catch {
+        case e:Exception => e.printStackTrace()
+      }
     }
   }
 
@@ -36,6 +41,7 @@ class TcpListener(localEp: InetAddressAndPort, handler: RequestOrResponse ⇒ Re
   var serverSocket: ServerSocket = null
 
   def shudown() = {
+    isRunning.set(false)
     Utils.swallow(serverSocket.close())
   }
 
@@ -48,9 +54,9 @@ class TcpListener(localEp: InetAddressAndPort, handler: RequestOrResponse ⇒ Re
       serverSocket = new ServerSocket()
       serverSocket.bind(new InetSocketAddress(localEp.address, localEp.port))
       info(s"Listening on ${localEp}")
-      while (true) {
+      while (isRunning.get()) {
         val socket = serverSocket.accept()
-        val socketIo = new SocketIO(socket, classOf[RequestOrResponse])
+        val socketIo = new SocketIO(socket, classOf[RequestOrResponse], 5000)
         socketIo.readHandleWithSocket((request, socket) ⇒ { //Dont close socket after read. It will be closed after write
           workQueue.submitRequest(request, socketIo)
         })
