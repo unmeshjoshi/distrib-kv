@@ -48,7 +48,7 @@ class KVStoreQuorumWriteTest extends FunSuite {
     }, "Waiting for server2 to be marked unreachable", 15000)
 
     val client = new Client(clientListenAddress)
-    val writeQuorum = client.put("table1", "key1", "value1")
+    val writeQuorum = client.put("table1", "229092999292992", "value1")
     assert(writeQuorum.size == 2)
     assert(writeQuorum.map(m => JsonSerDes.deserialize(m.payloadJson, classOf[RowMutationResponse]).success).toSet == Set(true))
 
